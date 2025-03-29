@@ -1,6 +1,5 @@
 '''
-Created on 15.03.2025
-@author: Mirko THULKE, Versailles
+@author: Mirko THULKE, Versailles, 2025
 
 important commands : 
 cmd> pip install pyaudio
