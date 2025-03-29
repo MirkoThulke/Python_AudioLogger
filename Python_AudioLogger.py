@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import configparser
 import threading
 import time
+import subprocess
+import datetime
 
 # Behringer UMC control panel settings :
 # ASIO buffer size 512   
@@ -28,7 +30,7 @@ RATE = 48000  # Sampling rate (samples per second)
 CHUNK = 1024  # Number of frames per buffer (size of each audio chunk)
 DEVICE_INDEX = None  # Set to the correct device index if you have multiple devices
 CHUNK_SEC = CHUNK/RATE # Chunk duration in seconds
-WAVE_DT_SEC = 3 # Delta time duration before and after noise event, that will be added to wave output
+WAVE_DT_SEC = 1 # Delta time duration before and after noise event, that will be added to wave output
 CHUNK_DNUM = int(WAVE_DT_SEC/CHUNK_SEC) # number of chunks to be added before and after noise event, that will be added to wave output
 
 
@@ -49,7 +51,7 @@ MAX_INT16 = np.iinfo(np.int16).max
 # Set parameters for audio outut
 RECORD_SECONDS = 4        # Duration of the recording in seconds
 OUTPUT_FILENAME = "output.wav"  # Output WAV file
-
+OUTPUT_NOISE_FILENAME = "Bruit_" #Output filename prefix for logged noise events
 
 #Global Variables #######################################
 
@@ -93,12 +95,20 @@ audio_data_max_pcm_value            = 0
 #for output wave file creation / all chunks, complete measurement
 frames                              = []
 
+chunk_index_i                       = 0
 chunk_noise_index_list              = []
+chunk_noise_spl_list                = []
 
 
 # Global Funtion definitions ##########################################
-
-    
+def get_commit_version():
+    try:
+        # Run 'git rev-parse HEAD' to get the commit hash
+        commit_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip().decode('utf-8')
+        return commit_hash
+    except subprocess.CalledProcessError:
+        return "Not a git repository or error retrieving commit."
+ 
 def func_check_devices():
     global p
     
@@ -224,11 +234,17 @@ def func_process_audio_input(frame):
     global audio_data_pressurePa_spl
     global system_calibration_factor_94db
     
+    global chunk_index_i
+    global chunk_noise_index_list
+    global chunk_noise_spl_list
+    
     print("recording_thread started 1/2")
+    
     
     #reset audio input related lists and counters
     chunk_index_i = 0    # counter of processed chunks
     chunk_noise_index_list = []
+    chunk_noise_spl_list = []
     frames = []
     
     while is_recording:    
@@ -250,6 +266,7 @@ def func_process_audio_input(frame):
         
         if audio_data_pressurePa_spl > 90 :
             chunk_noise_index_list.append(chunk_index_i)
+            chunk_noise_spl_list.append(audio_data_pressurePa_spl)
         
     wx.CallAfter(frame.update_status,  f"Recording terminated. Number of chunks processed: {chunk_index_i}")    
 
@@ -259,6 +276,8 @@ def func_process_audio_input(frame):
 
     print(f"chunk_noise_index_list : {chunk_noise_index_list}")
 
+    
+    
 def func_run_calibration():
     global p
     global stream
@@ -488,20 +507,72 @@ def func_on_saveWave_exit_click():
         print(f"Audio saved as {OUTPUT_FILENAME}")
 
 
-def func_saveWave_on_noise_event(noise_file_name, i):
+def func_saveWave_on_noise_event():
     global p
-    global frames_with_noise
+    global frames
+    
+    global chunk_index_i
+    global chunk_noise_index_list
+    global chunk_noise_spl_list
+    
+    max_spl_in_chunk = 0
+    max_spl_index_in_chunk = 0
+    max_spl_chunk_index = 0
+    start_chunk = 0
+    stop_chunk = 0
+    
+    noise_frames = []
+  
+    # Wait for 1 second before running the task again. 
+    #Start with offset of 1 sec.
+    time.sleep(1)
+
+   
+    # check if events are detected and stored in the list
+    if chunk_noise_index_list :
+        print(f"Events detected : {chunk_noise_index_list}")
+        print(f"Current chunk processed is : {chunk_index_i}")
+        
+        #identify max spl value and repsective hunk number 
+        max_spl_in_chunk = max(chunk_noise_spl_list)
+        max_spl_index_in_chunk = chunk_noise_spl_list.index(max_spl_in_chunk)
+        #index of the chunk with maximum spl 
+        max_spl_chunk_index = chunk_noise_index_list[max_spl_index_in_chunk]
+        
+        #extract the relevant noise frames + some delta
+        start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
+        stop_chunk = max_spl_chunk_index+CHUNK_DNUM
+        
+        noise_frames = frames[start_chunk:stop_chunk]
+        
+        # Get the current local time
+        local_time = datetime.datetime.now()
+        
+        # construct file name with relevant data
+        noise_file_name = f"{OUTPUT_NOISE_FILENAME}__DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}"
 
 
-    # Write the recorded data to a WAV file
-    with wave.open(noise_file_name, 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames_with_noise))
-        print(f"Audio saved as {noise_file_name}")
+        # Write the recorded data to a WAV file
+        with wave.open(noise_file_name, 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(noise_frames))
+            print(f"Audio saved as {noise_file_name}")
         
+        # erase noise event buffer
+        chunk_noise_index_list = []
+        max_spl_in_chunk = 0
+        max_spl_index_in_chunk = 0
+        max_spl_chunk_index = 0
+        start_chunk = 0
+        stop_chunk = 0
+        noise_frames = []
         
+        #remove chunks from wave output which are already treated. To free local resources.
+        frames = frames[start_chunk:]
+
+
 def func_on_plotWave_exit_click():
     #read the wave back and plot for visual inspaction
     # Open the .wav file
@@ -557,7 +628,8 @@ class MyFrame(wx.Frame):
         print(f"_device_index[loaded from config file]:  {_device_index}")
         print(f"system_calibration_factor_94db[loaded from config file]:  {system_calibration_factor_94db}")
 
-
+        # Print the commit hash
+        print("Commit version:", get_commit_version())
         
         # Create a panel inside the frame
         panel = wx.Panel(self)
