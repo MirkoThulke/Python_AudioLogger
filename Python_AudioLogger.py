@@ -2,8 +2,15 @@
 @author: Mirko THULKE, Versailles, 2025
 
 important commands : 
+cmd> python -m pip install --upgrade pip
 cmd> pip install pyaudio
 cmd> pip install numpy
+cmd> where python
+cmd> python --version
+cmd> python3 --version
+cmd> pip install --upgrade -r requirements.txt
+cmd> pip freeze > requirements.txt
+cmd> pip list --outdated
 
 '''
 import pyaudio
@@ -66,6 +73,8 @@ config                              = configparser.ConfigParser()
 
 # flag to track recoding state
 is_recording                        = False
+# flag to track logging state
+is_logging                          = False
 
 # Open stream to read audio from the microphone
 
@@ -212,7 +221,7 @@ def func_calc_SPL():
         audio_data_pressurePa_spl = 0     
         
     print(f"SPL (dB): {audio_data_pressurePa_spl}")  
-
+    print()
 
 
 def func_process_audio_input(frame):
@@ -419,11 +428,13 @@ def func_check_calibration():
 
 def func_on_button_start_click(frame):
     global is_recording
+    global is_logging 
     
     # Enable / Disable buttons
     frame.button_start.Disable()
     frame.button_stop.Enable()
     
+    # Start recording thread
     wx.CallAfter(frame.update_status,  "Start button pressed...")
     print(f"is_recording: {is_recording}")
     if not is_recording:
@@ -433,26 +444,55 @@ def func_on_button_start_click(frame):
         # The thread is required to decouple the input stream reading from the GUI app 
 
         if frame.recording_thread is None or not frame.recording_thread.is_alive():
-            print("recording_thread will be created now ")
+            print("recording thread will be created now ")
             
             # Argument : frame. Required to create a thread from inside the GUI that serves as longrunning
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
             frame.recording_thread =threading.Thread(target=func_process_audio_input, args=(frame,))
-            print("recording_thread created")
+            print("recording thread created")
+            
             frame.recording_thread.start()
-            print("recording_thread started 2/2")
+            print("recording thread started 2/2")
+            
             # Update the status text after the task is complete (safely in the main thread)
-            wx.CallAfter(frame.update_status,  "Thread started 2...")
+            wx.CallAfter(frame.update_status,  "recording thread started 2...")
         else:
-            wx.CallAfter(frame.update_status,  "Thread is already running.")
-            print("Thread is already running 1.")
+            wx.CallAfter(frame.update_status,  "recording thread is already running.")
+            print("recording thread is already running 1.")
     else:
-        wx.CallAfter(frame.update_status,  "Thread is already running.")
-        print("Thread is already running 2.")
+        wx.CallAfter(frame.update_status,  "recording thread is already running.")
+        print("recording thread is already running 2.")
 
+    
+    # Start logging thread
+    if not is_logging:
+        is_logging = True
+        print(f"is_logging: {is_logging}")
+        # Create a separate thread to run the process
+        # The thread is required to decouple the input stream reading from the GUI app 
+
+        if frame.logging_thread is None or not frame.logging_thread.is_alive():
+            print("logging thread will be created now ")
+            
+            # Argument : frame. Required to create a thread from inside the GUI that serves as longrunning
+            # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
+            frame.logging_thread =threading.Thread(target=func_saveWave_on_noise_event, args=(frame,))
+            print("logging thread created")
+            frame.logging_thread.start()
+            print("logging thread started 2/2")
+            # Update the status text after the task is complete (safely in the main thread)
+            wx.CallAfter(frame.update_status,  "logging Thread started 2...")
+        else:
+            wx.CallAfter(frame.update_status,  "logging Thread is already running.")
+            print("logging Thread is already running 1.")
+    else:
+        wx.CallAfter(frame.update_status,  "logging Thread is already running.")
+        print("logging Thread is already running 2.")
+        #func_saveWave_on_noise_event()
 
 def func_on_button_stop_click(frame):
     global is_recording
+    global is_logging
     
     # Enable / Disable buttons
     frame.button_start.Enable()
@@ -462,12 +502,21 @@ def func_on_button_stop_click(frame):
     is_recording = False
     print(f"is_recording: {is_recording}")
     
+    print(f"is_logging: {is_logging}")
+    is_logging = False
+    print(f"is_logging: {is_logging}")
+    
     if frame.recording_thread is not None and frame.recording_thread.is_alive():
         frame.recording_thread.join()  # Wait for the thread to finish gracefully
-        wx.CallAfter(frame.update_status,  "Thread stopped.")
+        wx.CallAfter(frame.update_status,  "Recording Thread stopped.")
     else:
-        wx.CallAfter(frame.update_status,  "No thread is running.")
+        wx.CallAfter(frame.update_status,  "No Recording thread is running.")
     
+    if frame.logging_thread is not None and frame.logging_thread.is_alive():
+        frame.logging_thread.join()  # Wait for the thread to finish gracefully
+        wx.CallAfter(frame.update_status,  "logging Thread stopped.")
+    else:
+        wx.CallAfter(frame.update_status,  "No logging thread is running.")
    
 
 def func_on_button_runCalib_click(frame):
@@ -507,13 +556,15 @@ def func_on_saveWave_exit_click():
         print(f"Audio saved as {OUTPUT_FILENAME}")
 
 
-def func_saveWave_on_noise_event():
+def func_saveWave_on_noise_event(frame):
     global p
     global frames
     
     global chunk_index_i
     global chunk_noise_index_list
     global chunk_noise_spl_list
+    
+    global is_logging
     
     max_spl_in_chunk = 0
     max_spl_index_in_chunk = 0
@@ -523,54 +574,58 @@ def func_saveWave_on_noise_event():
     
     noise_frames = []
   
-    # Wait for 1 second before running the task again. 
-    #Start with offset of 1 sec.
-    time.sleep(1)
+    print("logging_thread started 1/2")
+    
+    while is_logging:  
+        
+        # Wait for 1 second before running the task again. 
+        #Start with offset of 1 sec.
+        time.sleep(1)
+        
+        # check if events are detected and stored in the list
+        if chunk_noise_index_list :
+            print(f"Events detected : {chunk_noise_index_list}")
+            print(f"Current chunk processed is : {chunk_index_i}")
+        
+            #identify max spl value and repsective hunk number 
+            max_spl_in_chunk = max(chunk_noise_spl_list)
+            max_spl_index_in_chunk = chunk_noise_spl_list.index(max_spl_in_chunk)
+            #index of the chunk with maximum spl 
+            max_spl_chunk_index = chunk_noise_index_list[max_spl_index_in_chunk]
+        
+            #extract the relevant noise frames + some delta
+            start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
+            stop_chunk = max_spl_chunk_index+CHUNK_DNUM
+        
+            noise_frames = frames[start_chunk:stop_chunk]
+        
+            # Get the current local time
+            local_time = datetime.datetime.now()
+        
+            # construct file name with relevant data
+            noise_file_name = f"{OUTPUT_NOISE_FILENAME}__DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}"
 
-   
-    # check if events are detected and stored in the list
-    if chunk_noise_index_list :
-        print(f"Events detected : {chunk_noise_index_list}")
-        print(f"Current chunk processed is : {chunk_index_i}")
-        
-        #identify max spl value and repsective hunk number 
-        max_spl_in_chunk = max(chunk_noise_spl_list)
-        max_spl_index_in_chunk = chunk_noise_spl_list.index(max_spl_in_chunk)
-        #index of the chunk with maximum spl 
-        max_spl_chunk_index = chunk_noise_index_list[max_spl_index_in_chunk]
-        
-        #extract the relevant noise frames + some delta
-        start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
-        stop_chunk = max_spl_chunk_index+CHUNK_DNUM
-        
-        noise_frames = frames[start_chunk:stop_chunk]
-        
-        # Get the current local time
-        local_time = datetime.datetime.now()
-        
-        # construct file name with relevant data
-        noise_file_name = f"{OUTPUT_NOISE_FILENAME}__DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}"
 
-
-        # Write the recorded data to a WAV file
-        with wave.open(noise_file_name, 'wb') as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(p.get_sample_size(FORMAT))
-            wf.setframerate(RATE)
-            wf.writeframes(b''.join(noise_frames))
-            print(f"Audio saved as {noise_file_name}")
+            # Write the recorded data to a WAV file
+            with wave.open(noise_file_name, 'wb') as wf:
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(p.get_sample_size(FORMAT))
+                wf.setframerate(RATE)
+                wf.writeframes(b''.join(noise_frames))
+                print(f"Audio saved as {noise_file_name}")
         
-        # erase noise event buffer
-        chunk_noise_index_list = []
-        max_spl_in_chunk = 0
-        max_spl_index_in_chunk = 0
-        max_spl_chunk_index = 0
-        start_chunk = 0
-        stop_chunk = 0
-        noise_frames = []
+                # erase noise event buffer
+                chunk_noise_index_list = []
+                max_spl_in_chunk = 0
+                max_spl_index_in_chunk = 0
+                max_spl_chunk_index = 0
+                start_chunk = 0
+                stop_chunk = 0
+                noise_frames = []
         
-        #remove chunks from wave output which are already treated. To free local resources.
-        frames = frames[start_chunk:]
+                #remove chunks from wave output which are already treated. To free local resources.
+                frames = frames[start_chunk:]
+                wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}")
 
 
 def func_on_plotWave_exit_click():
@@ -635,7 +690,8 @@ class MyFrame(wx.Frame):
         panel = wx.Panel(self)
    
         # To store reference to the thread
-        self.recording_thread   = None  
+        self.recording_thread   = None
+        self.logging_thread     = None 
         self.runCalib_thread    = None
         self.checkCalib_thread  = None
               
