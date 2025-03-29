@@ -27,6 +27,10 @@ CHANNELS = 1  # Mono audio (1 channel)
 RATE = 48000  # Sampling rate (samples per second)
 CHUNK = 1024  # Number of frames per buffer (size of each audio chunk)
 DEVICE_INDEX = None  # Set to the correct device index if you have multiple devices
+CHUNK_SEC = CHUNK/RATE # Chunk duration in seconds
+WAVE_DT_SEC = 3 # Delta time duration before and after noise event, that will be added to wave output
+CHUNK_DNUM = int(WAVE_DT_SEC/CHUNK_SEC) # number of chunks to be added before and after noise event, that will be added to wave output
+
 
 REFERENCE_PRESSURE = 20e-6  # in Pa. Reference pressure in Pa (20 µPa)
 MIC_SENSITIVITY = 15 # 15mV Sensitivity (mV / Pa) of the Behringer ECM8000 (for better understanding only)
@@ -84,10 +88,13 @@ audio_data_pressurePa_squareMean    = np.array([])
 audio_data_pressurePa_rms           = np.array([])
 audio_data_pressurePa_rms_calib     = np.array([])
 audio_data_pressurePa_spl           = np.array([])
-max_value                           = 0
+audio_data_max_pcm_value            = 0
 
-#for output wave file creation
+#for output wave file creation / all chunks, complete measurement
 frames                              = []
+
+chunk_noise_index_list              = []
+
 
 # Global Funtion definitions ##########################################
 
@@ -127,15 +134,13 @@ def func_on_button_setDevices_click(frame):
 
 def func_calc_SPL():
 
-    # static
-    global max_value
     
     # input data
     global audio_data
     global system_calibration_factor_94db
     
     #output data
-    global max_value
+    global audio_data_max_pcm_value
     global audio_data 
     global audio_data_pcm_abs
     global audio_data_mV
@@ -159,10 +164,10 @@ def func_calc_SPL():
     audio_data_pressurePa_spl = np.zeros(audio_data_pressurePa_spl.shape)
 
     # Check  the maximum absolute value
-    max_value_new = np.max(np.abs(audio_data))
+    audio_data_max_pcm_value_new = np.max(np.abs(audio_data))
     
     # save if highest of all chunks
-    max_value = max(max_value, max_value_new)
+    audio_data_max_pcm_value = max(audio_data_max_pcm_value, audio_data_max_pcm_value_new)
     # Example: Process the audio (e.g., calculate RMS for volume level) 
         
     # Absolute values first      
@@ -220,7 +225,12 @@ def func_process_audio_input(frame):
     global system_calibration_factor_94db
     
     print("recording_thread started 1/2")
-    i = 0    # counter of processed chunks
+    
+    #reset audio input related lists and counters
+    chunk_index_i = 0    # counter of processed chunks
+    chunk_noise_index_list = []
+    frames = []
+    
     while is_recording:    
         # Read a chunk of audio data
         data = stream.read(CHUNK)
@@ -234,16 +244,20 @@ def func_process_audio_input(frame):
         # Calculate PCM to SPl ! 
         func_calc_SPL()
         
-        i = i+1
-        wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {i}")
+        #chunk counter
+        chunk_index_i = chunk_index_i+1
+        wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {chunk_index_i}")
         
+        if audio_data_pressurePa_spl > 90 :
+            chunk_noise_index_list.append(chunk_index_i)
         
-    wx.CallAfter(frame.update_status,  f"Recording terminated. Number of chunks processed: {i}")    
+    wx.CallAfter(frame.update_status,  f"Recording terminated. Number of chunks processed: {chunk_index_i}")    
 
 
     print("Recording thread stopped.")
     wx.CallAfter(frame.update_status,  "Recording stopped ...")
 
+    print(f"chunk_noise_index_list : {chunk_noise_index_list}")
 
 def func_run_calibration():
     global p
@@ -252,7 +266,7 @@ def func_run_calibration():
     global is_recording
     global  _device_index
     
-    global max_value
+    global audio_data_max_pcm_value
     global audio_data 
     global audio_data_pcm_abs
     global audio_data_mV
@@ -267,7 +281,7 @@ def func_run_calibration():
 
     calib_arr = []
     i= 0 
-    max_value = 0
+    audio_data_max_pcm_value  = 0
     
     
     while i<CALIB_ITERATION_LENGTH :
@@ -302,13 +316,13 @@ def func_run_calibration():
          
     # Check if the input PCM coded signal at 94dB calibration db (which is quite loud) is using the full range of the sint16 signal range
     # Check maximum across all chunks, see while loop
-    print(f"Maximum PCM  amplitude: {max_value}")
-    if max_value > int(MAX_INT16*0.95) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {max_value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)       
-    elif max_value < int(MAX_INT16*0.8) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {max_value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)      
+    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value}")
+    if audio_data_max_pcm_value > int(MAX_INT16*0.95) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)       
+    elif audio_data_max_pcm_value < int(MAX_INT16*0.8) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)      
     else :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {max_value}/{MAX_INT16}. PreAmp GAIN OK !","Info", wx.OK | wx.ICON_INFORMATION)
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. PreAmp GAIN OK !","Info", wx.OK | wx.ICON_INFORMATION)
     
     # calculate average calibration factor across all chunks, see while loop
     calib_average = sum(calib_arr) / len(calib_arr)
@@ -474,6 +488,20 @@ def func_on_saveWave_exit_click():
         print(f"Audio saved as {OUTPUT_FILENAME}")
 
 
+def func_saveWave_on_noise_event(noise_file_name, i):
+    global p
+    global frames_with_noise
+
+
+    # Write the recorded data to a WAV file
+    with wave.open(noise_file_name, 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames_with_noise))
+        print(f"Audio saved as {noise_file_name}")
+        
+        
 def func_on_plotWave_exit_click():
     #read the wave back and plot for visual inspaction
     # Open the .wav file
