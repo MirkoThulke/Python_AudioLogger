@@ -58,7 +58,7 @@ MAX_INT16 = np.iinfo(np.int16).max
 # Set parameters for audio outut
 RECORD_SECONDS = 4        # Duration of the recording in seconds
 OUTPUT_FILENAME = "output.wav"  # Output WAV file
-OUTPUT_NOISE_FILENAME = "Bruit_" #Output filename prefix for logged noise events
+OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 
 #Global Variables #######################################
 
@@ -105,8 +105,8 @@ audio_data_max_pcm_value            = 0
 frames                              = []
 
 chunk_index_i                       = 0
-chunk_noise_index_list              = []
-chunk_noise_spl_list                = []
+chunk_noise_list_index              = []
+chunk_noise_list_spl                = []
 
 
 # Global Funtion definitions ##########################################
@@ -220,8 +220,7 @@ def func_calc_SPL():
     else :
         audio_data_pressurePa_spl = 0     
         
-    print(f"SPL (dB): {audio_data_pressurePa_spl}")  
-    print()
+    print(f"SPL (dB): {audio_data_pressurePa_spl}")
 
 
 def func_process_audio_input(frame):
@@ -244,16 +243,16 @@ def func_process_audio_input(frame):
     global system_calibration_factor_94db
     
     global chunk_index_i
-    global chunk_noise_index_list
-    global chunk_noise_spl_list
+    global chunk_noise_list_index
+    global chunk_noise_list_spl
     
     print("recording_thread started 1/2")
     
     
     #reset audio input related lists and counters
     chunk_index_i = 0    # counter of processed chunks
-    chunk_noise_index_list = []
-    chunk_noise_spl_list = []
+    chunk_noise_list_index = []
+    chunk_noise_list_spl = []
     frames = []
     
     while is_recording:    
@@ -273,9 +272,9 @@ def func_process_audio_input(frame):
         chunk_index_i = chunk_index_i+1
         wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {chunk_index_i}")
         
-        if audio_data_pressurePa_spl > 90 :
-            chunk_noise_index_list.append(chunk_index_i)
-            chunk_noise_spl_list.append(audio_data_pressurePa_spl)
+        if audio_data_pressurePa_spl > 70 :
+            chunk_noise_list_index.append(chunk_index_i)
+            chunk_noise_list_spl.append(audio_data_pressurePa_spl)
         
     wx.CallAfter(frame.update_status,  f"Recording terminated. Number of chunks processed: {chunk_index_i}")    
 
@@ -283,7 +282,7 @@ def func_process_audio_input(frame):
     print("Recording thread stopped.")
     wx.CallAfter(frame.update_status,  "Recording stopped ...")
 
-    print(f"chunk_noise_index_list : {chunk_noise_index_list}")
+    print(f"chunk_noise_list_index : {chunk_noise_list_index}")
 
     
     
@@ -463,6 +462,7 @@ def func_on_button_start_click(frame):
         wx.CallAfter(frame.update_status,  "recording thread is already running.")
         print("recording thread is already running 2.")
 
+    print(f"logging thread will be started: {is_logging}")
     
     # Start logging thread
     if not is_logging:
@@ -561,8 +561,8 @@ def func_saveWave_on_noise_event(frame):
     global frames
     
     global chunk_index_i
-    global chunk_noise_index_list
-    global chunk_noise_spl_list
+    global chunk_noise_list_index
+    global chunk_noise_list_spl
     
     global is_logging
     
@@ -581,17 +581,19 @@ def func_saveWave_on_noise_event(frame):
         # Wait for 1 second before running the task again. 
         #Start with offset of 1 sec.
         time.sleep(1)
-        
+              
         # check if events are detected and stored in the list
-        if chunk_noise_index_list :
-            print(f"Events detected : {chunk_noise_index_list}")
+        if len(chunk_noise_list_index) > 0 :
+            print()
+            print("New Recording event: ")
+            print(f"Events detected : {chunk_noise_list_index}")
             print(f"Current chunk processed is : {chunk_index_i}")
         
             #identify max spl value and repsective hunk number 
-            max_spl_in_chunk = max(chunk_noise_spl_list)
-            max_spl_index_in_chunk = chunk_noise_spl_list.index(max_spl_in_chunk)
+            max_spl_in_chunk = max(chunk_noise_list_spl)
+            max_spl_index_in_chunk = chunk_noise_list_spl.index(max_spl_in_chunk)
             #index of the chunk with maximum spl 
-            max_spl_chunk_index = chunk_noise_index_list[max_spl_index_in_chunk]
+            max_spl_chunk_index = chunk_noise_list_index[max_spl_index_in_chunk]
         
             #extract the relevant noise frames + some delta
             start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
@@ -600,33 +602,38 @@ def func_saveWave_on_noise_event(frame):
             noise_frames = frames[start_chunk:stop_chunk]
         
             # Get the current local time
-            local_time = datetime.datetime.now()
+            current_time = datetime.datetime.now()
+            # Round to the nearest second (remove microseconds)
+            rounded_time = current_time.replace(microsecond=0)
         
             # construct file name with relevant data
-            noise_file_name = f"{OUTPUT_NOISE_FILENAME}__DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}"
-
+            noise_file_name = f"{OUTPUT_NOISE_FILENAME}_DataID{max_spl_chunk_index}_dB{round(max_spl_in_chunk,2)}_Date{rounded_time}"
+            print(noise_file_name)
 
             # Write the recorded data to a WAV file
+            '''
             with wave.open(noise_file_name, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
                 wf.setsampwidth(p.get_sample_size(FORMAT))
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
                 print(f"Audio saved as {noise_file_name}")
+            '''
+            #erase noise event buffer
+            chunk_noise_list_index = []
+            chunk_noise_list_spl = []
+            
+            max_spl_in_chunk = 0
+            max_spl_index_in_chunk = 0
+            max_spl_chunk_index = 0
+            start_chunk = 0
+            stop_chunk = 0
+            noise_frames = []
         
-                # erase noise event buffer
-                chunk_noise_index_list = []
-                max_spl_in_chunk = 0
-                max_spl_index_in_chunk = 0
-                max_spl_chunk_index = 0
-                start_chunk = 0
-                stop_chunk = 0
-                noise_frames = []
-        
-                #remove chunks from wave output which are already treated. To free local resources.
-                frames = frames[start_chunk:]
-                wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{local_time}")
-
+            #remove chunks from wave output which are already treated. To free local resources.
+            frames = frames[start_chunk:]
+            wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}")
+            print()
 
 def func_on_plotWave_exit_click():
     #read the wave back and plot for visual inspaction
@@ -857,6 +864,23 @@ if __name__ == "__main__":
     
         # Close audio interface
         p.terminate()
+        chunk_index_i = 0    # counter of processed chunks
+        chunk_noise_list_index = []
+        chunk_noise_list_spl = []
+        frames = []
+        is_recording = False
+        is_logging = False
+        audio_data                          = np.array([])
+        audio_data_pcm_abs                  = np.array([])
+        audio_data_mV                       = np.array([])
+        audio_data_mV_calib                 = np.array([])
+        audio_data_pressurePa               = np.array([])
+        audio_data_pressurePa_square        = np.array([])
+        audio_data_pressurePa_squareMean    = np.array([])
+        audio_data_pressurePa_rms           = np.array([])
+        audio_data_pressurePa_rms_calib     = np.array([])
+        audio_data_pressurePa_spl           = np.array([])
+        audio_data_max_pcm_value            = 0
     
         print("Application has finished.")
   
