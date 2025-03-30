@@ -24,6 +24,7 @@ import time
 import subprocess
 import datetime
 import os
+import scipy.signal as signal
 
 # Behringer UMC control panel settings :
 # ASIO buffer size 512   
@@ -54,6 +55,17 @@ PRE_AMP_GAIN_LIN = np.power(10, (PRE_AMP_GAIN_DB / 20) ) # Converted to linear s
 system_calibration_factor_94db = 1 # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
 CALIB_ITERATION_LENGTH = 50 # 50 chunks are checked during calibration
 MAX_INT16 = np.iinfo(np.int16).max
+
+# dB(A) Threshold for indoor noise
+# NIGHT : 22h00 - 06h00
+SPL_MAX_DAY_DBA     = 50
+SPL_MAX_NIGH_DBA    = 35
+
+
+# A-weighting filter coefficients (pre-calculated)
+#A_WEIGHTING_BAND = np.array([0.0009, 0.0025, 0.0049, 0.0071, 0.0102, 0.0160, 0.0254, 0.0364, 0.0509, 0.0720, 0.0973, 0.1278, 0.1609, 0.2217])
+A_WEIGHTING_BAND = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+A_WEIGHTING_FREQUENCY = np.array([20, 31.5, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630])
 
 
 # Set parameters for audio outut
@@ -92,6 +104,7 @@ print("Audio stream opened")
 
 # audio data extraceted from chunk in np format.
 audio_data                          = np.array([])
+a_weighted_signal                   = np.array([])
 audio_data_pcm_abs                  = np.array([])
 audio_data_mV                       = np.array([])
 audio_data_mV_calib                 = np.array([])
@@ -152,17 +165,39 @@ def func_on_button_setDevices_click(frame):
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
 
+def apply_a_weighting(frequencies, audio_data):
+    """Apply the A-weighting filter to the signal"""
+    
+    # A-weighting filter design
+    # b, a = signal.iirfilter(4, A_WEIGHTING_FREQUENCY, btype='bandpass', ftype='butter', fs=RATE)
+    
+    # convert to float for filtering
+    float_array  = audio_data.astype(np.float32)
+    
+    # use signal package
+    # float_array_filt     = signal.filtfilt(b, a, float_array)
+    float_array_filt = float_array
+    
+    #convert back to integer for further processing
+    int_array   = float_array_filt.astype(np.int16)
+    
+    print(f'audio_data: {audio_data}')
+    print(f'float_array: {float_array}')
+    print(f'float_array_filt: {float_array_filt}') 
+    print(f'int_array: {int_array}')   
+    
+    return ( int_array )
+
 
 def func_calc_SPL():
-
-    
+ 
     # input data
     global audio_data
+    global a_weighted_signal
     global system_calibration_factor_94db
     
     #output data
     global audio_data_max_pcm_value
-    global audio_data 
     global audio_data_pcm_abs
     global audio_data_mV
     global audio_data_pressurePa
@@ -171,7 +206,7 @@ def func_calc_SPL():
     global audio_data_pressurePa_rms
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
-    global system_calibration_factor_94db
+
     
     
     # reset output arrays :
@@ -184,15 +219,21 @@ def func_calc_SPL():
     audio_data_pressurePa_rms_calib = np.zeros(audio_data_pressurePa_rms_calib.shape)
     audio_data_pressurePa_spl = np.zeros(audio_data_pressurePa_spl.shape)
 
+    
+    # Apply A-weighting to the signal
+    # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
+    # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
+    a_weighted_signal = apply_a_weighting(A_WEIGHTING_FREQUENCY, audio_data)
+
     # Check  the maximum absolute value
-    audio_data_max_pcm_value_new = np.max(np.abs(audio_data))
+    audio_data_max_pcm_value_new = np.max(np.abs(a_weighted_signal))
     
     # save if highest of all chunks
     audio_data_max_pcm_value = max(audio_data_max_pcm_value, audio_data_max_pcm_value_new)
     # Example: Process the audio (e.g., calculate RMS for volume level) 
         
     # Absolute values first      
-    audio_data_pcm_abs = np.abs(audio_data)
+    audio_data_pcm_abs = np.abs(a_weighted_signal)
     
     # Convert to mV using the Sensitivy value of the microphone/ Assuming that the microphone uses the full int16 signale range . 
     # Applying a preamp gain factor (only for better understanding)
