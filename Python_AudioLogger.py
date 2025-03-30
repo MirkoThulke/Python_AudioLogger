@@ -23,6 +23,7 @@ import threading
 import time
 import subprocess
 import datetime
+import os
 
 # Behringer UMC control panel settings :
 # ASIO buffer size 512   
@@ -59,6 +60,7 @@ MAX_INT16 = np.iinfo(np.int16).max
 RECORD_SECONDS = 4        # Duration of the recording in seconds
 OUTPUT_FILENAME = "output.wav"  # Output WAV file
 OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
+OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 #Global Variables #######################################
 
@@ -85,7 +87,7 @@ stream = p.open(format=FORMAT,
     input_device_index = _device_index ,
     frames_per_buffer=CHUNK)
 
-print("Recording...func_process_audio_input")
+print("Audio stream opened")
 
 
 # audio data extraceted from chunk in np format.
@@ -451,6 +453,7 @@ def func_on_button_start_click(frame):
             print("recording thread created")
             
             frame.recording_thread.start()
+            print()
             print("recording thread started 2/2")
             
             # Update the status text after the task is complete (safely in the main thread)
@@ -608,17 +611,27 @@ def func_saveWave_on_noise_event(frame):
         
             # construct file name with relevant data
             noise_file_name = f"{OUTPUT_NOISE_FILENAME}_DataID{max_spl_chunk_index}_dB{round(max_spl_in_chunk,2)}_Date{rounded_time}"
+            # make it compatible with windows filename rules
+            noise_file_name = noise_file_name.replace(' ', '_').replace(':', '-')
             print(noise_file_name)
 
+            # Ensure the directory exists (optional, for better handling)
+            os.makedirs(OUTPUT_FILE_DIRECTORY, exist_ok=True)
+
+            # Combine directory and file name
+            full_path = os.path.join(OUTPUT_FILE_DIRECTORY, noise_file_name)
+            print(full_path)
+                        
             # Write the recorded data to a WAV file
-            '''
-            with wave.open(noise_file_name, 'wb') as wf:
+
+            with wave.open(full_path, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
                 wf.setsampwidth(p.get_sample_size(FORMAT))
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
                 print(f"Audio saved as {noise_file_name}")
-            '''
+
+
             #erase noise event buffer
             chunk_noise_list_index = []
             chunk_noise_list_spl = []
