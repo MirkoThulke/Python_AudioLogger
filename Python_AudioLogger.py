@@ -722,10 +722,7 @@ def func_on_saveWave_exit_click():
         wf.writeframes(b''.join(frames))
         print(f"Audio saved as {OUTPUT_FILENAME}")
 
-
-def func_on_plotWave_exit_click():
-    #read the wave back and plot for visual inspaction
-    # Open the .wav file
+    # open the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'rb') as wav_file:
         sample_rate = wav_file.getframerate()  # Sample rate (samples per second)
         num_frames = wav_file.getnframes()
@@ -766,7 +763,7 @@ def func_on_plotWave_exit_click():
     positive_magnitude = fft_magnitude[:len(frequencies)//2]
     positive_magnitude_weighted = fft_magnitude_weighted[:len(frequencies)//2]    
  
-    
+    '''
     # Plot the waveform
     plt.figure(figsize=(10, 6))
     plt.plot(time, audio_data, color='blue')
@@ -775,6 +772,7 @@ def func_on_plotWave_exit_click():
     plt.ylabel('PCM encoded audio [sint16]')
     plt.grid(True)
     plt.show()        
+    '''
     
     # plot frames in time domaine
     # plot process frames in time domaine
@@ -795,6 +793,20 @@ def func_on_plotWave_exit_click():
     y4 = positive_magnitude_weighted
     
     
+
+ 
+    ymin_t = MAX_INT16 = np.iinfo(np.int16).min
+    ymax_t = MAX_INT16 = np.iinfo(np.int16).max
+    
+    
+    xmin_f = 0
+    xmax_f = 16000
+    
+    ymin_f = 0
+    ymax_f = max(max(positive_magnitude_weighted),max(positive_magnitude))
+
+
+    
     # Create a 2x2 grid of subplots (2 rows, 2 columns)
     fig, axs = plt.subplots(2, 2, figsize=(10, 6))
     
@@ -803,24 +815,30 @@ def func_on_plotWave_exit_click():
     axs[0, 0].set_title('Raw audio time domain')
     axs[0, 0].set_xlabel("Time [s]")
     axs[0, 0].set_ylabel('PCM encoded audio [sint16]')
-       
+    axs[0, 0].set_ylim(ymin_t, ymax_t)
+    
     # Third plot (bottom-left)
     axs[1, 0].plot(x2, y2)
     axs[1, 0].set_title('A-weighted audio time domain')
     axs[1, 0].set_xlabel("Time [s]")
     axs[1, 0].set_ylabel('PCM encoded audio [sint16]')
+    axs[1, 0].set_ylim(ymin_t, ymax_t)
     
     # Second plot (top-right)
     axs[0, 1].plot(x3, y3)
     axs[0, 1].set_title('Raw audio frequency domain')
     axs[0, 1].set_xlabel("Freq. [kHz]")
     axs[0, 1].set_ylabel('PCM encoded audio [sint16]')
+    axs[0, 1].set_xlim(xmin_f, xmax_f)
+    axs[0, 1].set_ylim(ymin_f, ymax_f)
     
     # Fourth plot (bottom-right) with a different x-axis range
     axs[1, 1].plot(x4, y4)
     axs[1, 1].set_title('A-weighted audio frequency domain')
     axs[1, 1].set_xlabel("Freq. [kHz]")
     axs[1, 1].set_ylabel('PCM encoded audio [sint16]')
+    axs[1, 1].set_xlim(xmin_f, xmax_f)
+    axs[1, 1].set_ylim(ymin_f, ymax_f)
     
     # Adjust layout to prevent overlap
     plt.tight_layout()
@@ -895,10 +913,7 @@ class MyFrame(wx.Frame):
         self.button_exit = wx.Button(panel, label="Close Application", pos=(190, 280))
  
         # Create a button on the panel
-        self.button_saveWave = wx.Button(panel, label="Save Wave File [check signal]", pos=(10, 160))
-
-        # Create a button on the panel
-        self.button_plotWave = wx.Button(panel, label="Read and plot Wave file [check signal]", pos=(10, 190))
+        self.button_saveWave = wx.Button(panel, label="Save & Plot Wave File [check signal]", pos=(10, 180))
 
         
         ##################################################################
@@ -927,9 +942,6 @@ class MyFrame(wx.Frame):
    
         # Bind the button click event to an event handler function
         self.button_saveWave.Bind(wx.EVT_BUTTON, self.on_button_saveWave_click)
-   
-        # Bind the button click event to an event handler function
-        self.button_plotWave.Bind(wx.EVT_BUTTON, self.on_button_plotWave_click)
    
     
         # Show the window
@@ -984,11 +996,7 @@ class MyFrame(wx.Frame):
         # need self arguments to know which class instance to close
         func_on_saveWave_exit_click()
         
-        
-    def on_button_plotWave_click(self, event):
-        # Call function
-        # need self arguments to know which class instance to close
-        func_on_plotWave_exit_click()
+    
 
 
 class MyApp(wx.App):
