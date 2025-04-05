@@ -1,6 +1,36 @@
 '''
-@author: Mirko THULKE, Versailles, 2025
+# -----------------------------------------------------------------------------
+# Author: MIRKO THULKE 
+# Copyright (c) 2025, MIRKO THULKE
+# All rights reserved.
+#
+# Date: 2025, VERSAILLES, FRANCE
+#
+# MIT License
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+# FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
+#
+# -----------------------------------------------------------------------------
+'''
 
+
+'''
 important commands : 
 cmd> python -m pip install --upgrade pip
 cmd> pip install pyaudio
@@ -11,8 +41,8 @@ cmd> python3 --version
 cmd> pip install --upgrade -r requirements.txt
 cmd> pip freeze > requirements.txt
 cmd> pip list --outdated
-
 '''
+
 import pyaudio
 import numpy as np
 import wave
@@ -25,6 +55,10 @@ import subprocess
 import datetime
 import os
 import scipy.signal as signal
+import sympy
+import librosa
+from endolith_weighting_filters import A_weight
+
 
 # Behringer UMC control panel settings :
 # ASIO buffer size 512   
@@ -61,11 +95,6 @@ MAX_INT16 = np.iinfo(np.int16).max
 SPL_MAX_DAY_DBA     = 50
 SPL_MAX_NIGH_DBA    = 35
 
-
-# A-weighting filter coefficients (pre-calculated)
-#A_WEIGHTING_BAND = np.array([0.0009, 0.0025, 0.0049, 0.0071, 0.0102, 0.0160, 0.0254, 0.0364, 0.0509, 0.0720, 0.0973, 0.1278, 0.1609, 0.2217])
-A_WEIGHTING_BAND = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-A_WEIGHTING_FREQUENCY = np.array([20, 31.5, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630])
 
 
 # Set parameters for audio outut
@@ -165,7 +194,7 @@ def func_on_button_setDevices_click(frame):
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
 
-def apply_a_weighting(frequencies, audio_data):
+def apply_a_weighting(audio_data):
     """Apply the A-weighting filter to the signal"""
     
     # A-weighting filter design
@@ -174,9 +203,9 @@ def apply_a_weighting(frequencies, audio_data):
     # convert to float for filtering
     float_array  = audio_data.astype(np.float32)
     
-    # use signal package
-    # float_array_filt     = signal.filtfilt(b, a, float_array)
-    float_array_filt = float_array
+
+    # Apply A-weighting
+    float_array_filt = A_weight(float_array, RATE)
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
@@ -210,6 +239,7 @@ def func_calc_SPL():
     
     
     # reset output arrays :
+    a_weighted_signal = np.zeros(a_weighted_signal.shape)
     audio_data_pcm_abs = np.zeros(audio_data_pcm_abs.shape)
     audio_data_mV = np.zeros(audio_data_mV.shape)
     audio_data_pressurePa = np.zeros(audio_data_pressurePa.shape)
@@ -223,7 +253,7 @@ def func_calc_SPL():
     # Apply A-weighting to the signal
     # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
     # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
-    a_weighted_signal = apply_a_weighting(A_WEIGHTING_FREQUENCY, audio_data)
+    a_weighted_signal = apply_a_weighting(audio_data)
 
     # Check  the maximum absolute value
     audio_data_max_pcm_value_new = np.max(np.abs(a_weighted_signal))
@@ -315,7 +345,7 @@ def func_process_audio_input(frame):
         chunk_index_i = chunk_index_i+1
         wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {chunk_index_i}")
         
-        if audio_data_pressurePa_spl > 70 :
+        if audio_data_pressurePa_spl > SPL_MAX_DAY_DBA :
             chunk_noise_list_index.append(chunk_index_i)
             chunk_noise_list_spl.append(audio_data_pressurePa_spl)
         
@@ -587,18 +617,6 @@ def func_on_button_exit_click(frame):
     frame.Close()
 
 
-def func_on_saveWave_exit_click():
-    global p
-    global frames
-    
-    # Write the recorded data to a WAV file
-    with wave.open(OUTPUT_FILENAME, 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
-        print(f"Audio saved as {OUTPUT_FILENAME}")
-
 
 def func_saveWave_on_noise_event(frame):
     global p
@@ -673,7 +691,7 @@ def func_saveWave_on_noise_event(frame):
                 print(f"Audio saved as {noise_file_name}")
 
 
-            #erase noise event buffer
+            #erase noise event arrays
             chunk_noise_list_index = []
             chunk_noise_list_spl = []
             
@@ -689,6 +707,22 @@ def func_saveWave_on_noise_event(frame):
             wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}")
             print()
 
+
+
+def func_on_saveWave_exit_click():
+    global p
+    global frames
+    
+    
+    # Write the recorded data to a WAV file
+    with wave.open(OUTPUT_FILENAME, 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        print(f"Audio saved as {OUTPUT_FILENAME}")
+
+
 def func_on_plotWave_exit_click():
     #read the wave back and plot for visual inspaction
     # Open the .wav file
@@ -700,25 +734,102 @@ def func_on_plotWave_exit_click():
         num_frames = wav_file.getnframes()
            
         raw_data = wav_file.readframes(num_frames)
+ 
     
+    # read audio data and apply weighting filter    
     # Convert raw byte data into a numpy array
     # For 16-bit audio (common for WAV), use np.int16
     audio_data = np.frombuffer(raw_data, dtype=np.int16)
-    
+    # A-weighted audio data
+    audio_data_weighted =   apply_a_weighting(audio_data )
     # Create a time axis for plotting
     time = np.linspace(0, num_frames / sample_rate, num_frames)
+   
+   
+   
+    # FFT  
+    # Perform FFT on the audio signal
+    fft_signal = np.fft.fft(audio_data)
+    # Perform FFT on the audio signal
+    fft_signal_weighted = np.fft.fft(audio_data_weighted)
+
+    # Compute the corresponding frequencies
+    frequencies = np.fft.fftfreq(len(fft_signal), d=1/RATE)
+    
+    # Get the magnitude of the FFT
+    fft_magnitude = np.abs(fft_signal)
+        # Get the magnitude of the FFT
+    fft_magnitude_weighted = np.abs(fft_signal_weighted)
+    
+    # We only want the positive frequencies
+    positive_frequencies = frequencies[:len(frequencies)//2]
+    positive_magnitude = fft_magnitude[:len(frequencies)//2]
+    positive_magnitude_weighted = fft_magnitude_weighted[:len(frequencies)//2]    
+ 
     
     # Plot the waveform
     plt.figure(figsize=(10, 6))
     plt.plot(time, audio_data, color='blue')
-    plt.title("Waveform of Audio File")
+    plt.title('Raw audio time domain')
     plt.xlabel("Time [s]")
-    plt.ylabel("Amplitude")
+    plt.ylabel('PCM encoded audio [sint16]')
     plt.grid(True)
     plt.show()        
     
+    # plot frames in time domaine
+    # plot process frames in time domaine
+    # plot frames FFT
+    # plot process frames FFT
     
-        
+    # Create some data for plotting
+    x1 = time
+    y1 = audio_data
+
+    x2 = time
+    y2 = audio_data_weighted
+    
+    x3 = positive_frequencies
+    y3 = positive_magnitude
+    
+    x4 = positive_frequencies
+    y4 = positive_magnitude_weighted
+    
+    
+    # Create a 2x2 grid of subplots (2 rows, 2 columns)
+    fig, axs = plt.subplots(2, 2, figsize=(10, 6))
+    
+    # First plot (top-left)
+    axs[0, 0].plot(x1, y1)
+    axs[0, 0].set_title('Raw audio time domain')
+    axs[0, 0].set_xlabel("Time [s]")
+    axs[0, 0].set_ylabel('PCM encoded audio [sint16]')
+       
+    # Third plot (bottom-left)
+    axs[1, 0].plot(x2, y2)
+    axs[1, 0].set_title('A-weighted audio time domain')
+    axs[1, 0].set_xlabel("Time [s]")
+    axs[1, 0].set_ylabel('PCM encoded audio [sint16]')
+    
+    # Second plot (top-right)
+    axs[0, 1].plot(x3, y3)
+    axs[0, 1].set_title('Raw audio frequency domain')
+    axs[0, 1].set_xlabel("Freq. [kHz]")
+    axs[0, 1].set_ylabel('PCM encoded audio [sint16]')
+    
+    # Fourth plot (bottom-right) with a different x-axis range
+    axs[1, 1].plot(x4, y4)
+    axs[1, 1].set_title('A-weighted audio frequency domain')
+    axs[1, 1].set_xlabel("Freq. [kHz]")
+    axs[1, 1].set_ylabel('PCM encoded audio [sint16]')
+    
+    # Adjust layout to prevent overlap
+    plt.tight_layout()
+    
+    # Show the plots
+    plt.show()
+    
+    
+    
 # GUI ############################################"
 # Define the main application frame
 class MyFrame(wx.Frame):
