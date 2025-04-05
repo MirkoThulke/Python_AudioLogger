@@ -669,7 +669,7 @@ def func_saveWave_on_noise_event(frame):
             rounded_time = current_time.replace(microsecond=0)
         
             # construct file name with relevant data
-            noise_file_name = f"{OUTPUT_NOISE_FILENAME}_DataID{max_spl_chunk_index}_dB{round(max_spl_in_chunk,2)}_Date{rounded_time}"
+            noise_file_name = f"{OUTPUT_NOISE_FILENAME}_DataID{max_spl_chunk_index}_dBA{round(max_spl_in_chunk,2)}_Date{rounded_time}.wav"
             # make it compatible with windows filename rules
             noise_file_name = noise_file_name.replace(' ', '_').replace(':', '-')
             print(noise_file_name)
@@ -704,7 +704,7 @@ def func_saveWave_on_noise_event(frame):
         
             #remove chunks from wave output which are already treated. To free local resources.
             frames = frames[start_chunk:]
-            wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}")
+            wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")
             print()
 
 
