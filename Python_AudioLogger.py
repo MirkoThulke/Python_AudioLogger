@@ -73,7 +73,7 @@ RATE = 48000  # Sampling rate (samples per second)
 CHUNK = 1024  # Number of frames per buffer (size of each audio chunk)
 DEVICE_INDEX = None  # Set to the correct device index if you have multiple devices
 CHUNK_SEC = CHUNK/RATE # Chunk duration in seconds
-WAVE_DT_SEC = 1 # Delta time duration before and after noise event, that will be added to wave output
+WAVE_DT_SEC = 1.5 # Delta time duration before and after noise event, that will be added to wave output
 CHUNK_DNUM = int(WAVE_DT_SEC/CHUNK_SEC) # number of chunks to be added before and after noise event, that will be added to wave output
 
 
@@ -210,10 +210,10 @@ def apply_a_weighting(audio_data):
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
     
-    print(f'audio_data: {audio_data}')
-    print(f'float_array: {float_array}')
-    print(f'float_array_filt: {float_array_filt}') 
-    print(f'int_array: {int_array}')   
+    #print(f'audio_data: {audio_data}')
+    #print(f'float_array: {float_array}')
+    #print(f'float_array_filt: {float_array_filt}') 
+    #print(f'int_array: {int_array}')   
     
     return ( int_array )
 
@@ -268,12 +268,12 @@ def func_calc_SPL():
     # Convert to mV using the Sensitivy value of the microphone/ Assuming that the microphone uses the full int16 signale range . 
     # Applying a preamp gain factor (only for better understanding)
     audio_data_mV = audio_data_pcm_abs / PRE_AMP_GAIN_LIN
-    print(f"audio_data_mV: {audio_data_mV}")
+    #print(f"audio_data_mV: {audio_data_mV}")
     
     
     # Converting mV to Pa using the Sensitivy value
     audio_data_pressurePa = audio_data_mV / MIC_SENSITIVITY
-    print(f"audio_data_pressurePa: {audio_data_pressurePa}")
+    #print(f"audio_data_pressurePa: {audio_data_pressurePa}")
     
     # Convert to RMS - Root mean square
     audio_data_pressurePa_square = audio_data_pressurePa ** 2    
@@ -282,7 +282,7 @@ def func_calc_SPL():
         audio_data_pressurePa_rms = np.sqrt(audio_data_pressurePa_squareMean)
     else :
         audio_data_pressurePa_rms = 0           
-    print(f"audio_data_pressurePa_rms: {audio_data_pressurePa_rms}")   
+    #print(f"audio_data_pressurePa_rms: {audio_data_pressurePa_rms}")   
     
     audio_data_pressurePa_rms_calib =audio_data_pressurePa_rms* system_calibration_factor_94db
     
@@ -293,7 +293,7 @@ def func_calc_SPL():
     else :
         audio_data_pressurePa_spl = 0     
         
-    print(f"SPL (dB): {audio_data_pressurePa_spl}")
+    #print(f"SPL (dB): {audio_data_pressurePa_spl}")
 
 
 def func_process_audio_input(frame):
@@ -344,6 +344,7 @@ def func_process_audio_input(frame):
         #chunk counter
         chunk_index_i = chunk_index_i+1
         wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {chunk_index_i}")
+        print(f"chunk_index : {chunk_index_i}")
         
         if audio_data_pressurePa_spl > SPL_MAX_DAY_DBA :
             chunk_noise_list_index.append(chunk_index_i)
@@ -638,18 +639,19 @@ def func_saveWave_on_noise_event(frame):
   
     print("logging_thread started 1/2")
     
+
+    #Start with offset of wave output length
+    time.sleep(WAVE_DT_SEC)
+    
     while is_logging:  
         
-        # Wait for 1 second before running the task again. 
-        #Start with offset of 1 sec.
-        time.sleep(1)
+
               
         # check if events are detected and stored in the list
         if len(chunk_noise_list_index) > 0 :
             print()
             print("New Recording event: ")
-            print(f"Events detected : {chunk_noise_list_index}")
-            print(f"Current chunk processed is : {chunk_index_i}")
+
         
             #identify max spl value and repsective hunk number 
             max_spl_in_chunk = max(chunk_noise_list_spl)
@@ -661,8 +663,17 @@ def func_saveWave_on_noise_event(frame):
             start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
             stop_chunk = max_spl_chunk_index+CHUNK_DNUM
         
+            # Wait for minimuù time CHUNK_DNUM before saveing to add delta to the wave. 
+            while stop_chunk>chunk_index_i :
+                i = stop_chunk-chunk_index_i
+            
             noise_frames = frames[start_chunk:stop_chunk]
         
+            print(f"Current chunk processed is : {chunk_index_i}")
+            print(f"Events detected : {chunk_noise_list_index}")
+            print(f"start_chunk is : {start_chunk}")
+            print(f"stop_chunk is : {stop_chunk}")
+            
             # Get the current local time
             current_time = datetime.datetime.now()
             # Round to the nearest second (remove microseconds)
