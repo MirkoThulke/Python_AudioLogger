@@ -59,13 +59,20 @@ import os
 import psutil
 import time
 import datetime
+from matplotlib import streamplot
 from viztracer import VizTracer # visual thread debugging
 
 
-# visual thead debugging
+'''
+DEBUG == 0 # Default 
+DEBUG == 1 # tracer logs for runtime analysis
+'''
+DEBUG   = 0
 
-#tracer = VizTracer()  # Start VizTracer
-#tracer.start()
+# visual thead debugging
+if DEBUG == 1:
+    tracer = VizTracer()  # Start VizTracer
+    tracer.start()
 
 # open results in CMD : "vizviewer Python_AudioLogger_JSON_LogFile.json"
 # ZOOM into timeline by pressing CTLR + Mouse wheel
@@ -90,7 +97,6 @@ CHUNK_SEC = CHUNK/RATE # Chunk duration in seconds
 WAVE_DT_SEC = 1.5 # Delta time duration before and after noise event, that will be added to wave output
 CHUNK_DNUM = int(WAVE_DT_SEC/CHUNK_SEC) # number of chunks to be added before and after noise event, that will be added to wave output
 
-
 REFERENCE_PRESSURE = 20e-6  # in Pa. Reference pressure in Pa (20 µPa)
 MIC_SENSITIVITY = 15 # 15mV Sensitivity (mV / Pa) of the Behringer ECM8000 (for better understanding only)
 MIC_SPL_MAX_DB = 120   # in dB. virtual SPL max. value that the microphone can measure
@@ -100,7 +106,6 @@ MIC_MAX_MVOLT = MIC_PA_MAX * MIC_SENSITIVITY # maximum mV that the microphone ca
 PRE_AMP_GAIN_DB = 45  # in dB. Assupmption that the Gain poti on the UMC is on 3h00. Virtuel Pre-Amp Gain Factor for better understanding only
 PRE_AMP_GAIN_LIN = np.power(10, (PRE_AMP_GAIN_DB / 20) ) # Converted to linear scale.
 
-system_calibration_factor_94db = 1 # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
 CALIB_ITERATION_LENGTH = 50 # 50 chunks are checked during calibration
 MAX_INT16 = np.iinfo(np.int16).max
 
@@ -117,38 +122,22 @@ OUTPUT_FILENAME = "output.wav"  # Output WAV file
 OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
-# Global Variables #######################################
-
-# Persist Settings. Create config object.
-config                              = configparser.ConfigParser()
-
 
 # Global Variables SHARE MEMORY SECTION #######################################
 # Defined in shared memory to allow several processes to work on the data : multiprocessing."
-
-# Initialize PyAudio
-p                                   = pyaudio.PyAudio()
+# values must be accessed via .value postfix ! 
+# arrays do not require to have a postfix.
 
 # Device list user input 
 _device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
-
 
 # flag to track recoding state
 is_recording                        = multiprocessing.Value('b', False)  # 'b' stands for bolean
 # flag to track logging state
 is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
 
-# Open stream to read audio from the microphone
-
-stream = p.open(format=FORMAT,
-    channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    input_device_index = _device_index.value ,
-    frames_per_buffer=CHUNK)
-
-print("Audio stream opened")
-
+# 'i' stands for integer # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
+system_calibration_factor_94db      = multiprocessing.Value('f', 1.0)
 
 # audio data extraceted from chunk in np format.
 audio_data                          = np.array([])
@@ -165,39 +154,29 @@ audio_data_pressurePa_spl           = multiprocessing.Value('d', 0)  # 'd' stand
 audio_data_max_pcm_value            = multiprocessing.Value('d', 0)  # 'd' stands for double / float
 
 #for output wave file creation / all chunks, complete measurement
-frames                              = []
+frames                              = multiprocessing.Array('i', [])  # 'i' stands for integers
 
 chunk_index_i                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
 chunk_noise_list_index              = multiprocessing.Array('i', [])  # 'i' stands for integers
 chunk_noise_list_spl                = multiprocessing.Array('i', [])  # 'i' stands for integers
 
-'''
-    # input data
-    
-    global a_weighted_signal
-    global p
-    global stream
-    global frames
-    global is_recording
-    global _device_index
-    
-    global max_value
-    global audio_data 
-    global audio_data_pcm_abs
-    global audio_data_mV
-    global audio_data_pressurePa
-    global audio_data_pressurePa_square
-    global audio_data_pressurePa_squareMean
-    global audio_data_pressurePa_rms
-    global audio_data_pressurePa_rms_calib
-    global audio_data_pressurePa_spl
-    global system_calibration_factor_94db
-    
-    global chunk_index_i
-    global chunk_noise_list_index
-    global chunk_noise_list_spl
-    
-'''
+sample_size                         = multiprocessing.Value('i', 2)  # 'i' stands for integers
+
+
+
+# Global Variables NOT in shared memory #######################################
+
+# To persist Settings -> Initialise a config object.
+config                  = None
+
+# Global variables to Initialize PyAudio in the main Init class
+p                       = None
+# Open stream to read audio from the microphone
+stream                  = None
+
+
+
+
 # Global Funtion definitions ##########################################
 def get_commit_version():
     try:
@@ -209,7 +188,6 @@ def get_commit_version():
  
 def func_check_devices():
     global p
-    
     i=0
     
     # List available devices
@@ -221,9 +199,10 @@ def func_check_devices():
 
 
 def func_on_button_setDevices_click(frame):
+    global p
     global _device_index 
     
-    _device_index = 0
+    _device_index.value = 0
     min_range = 0
     max_range = 100
 
@@ -232,8 +211,8 @@ def func_on_button_setDevices_click(frame):
     # Check if the input is within the valid range
     # obtain user text input for device selection
     if min_range <= user_value  <= max_range:
-        _device_index = user_value
-        wx.MessageBox(f"Device {_device_index}: {p.get_device_info_by_index(_device_index)}","Info", wx.OK | wx.ICON_INFORMATION)
+        _device_index.value = user_value
+        wx.MessageBox(f"Device {_device_index.value}: {p.get_device_info_by_index(_device_index.value)}","Info", wx.OK | wx.ICON_INFORMATION)
     else :
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
@@ -281,15 +260,15 @@ def func_calc_SPL():
     
     
     # reset output arrays :
-    a_weighted_signal                   = np.zeros(a_weighted_signal.shape)
-    audio_data_pcm_abs                  = np.zeros(audio_data_pcm_abs.shape)
-    audio_data_mV                       = np.zeros(audio_data_mV.shape)
-    audio_data_pressurePa               = np.zeros(audio_data_pressurePa.shape)
-    audio_data_pressurePa_square        = np.zeros(audio_data_pressurePa_square.shape)
-    audio_data_pressurePa_squareMean    = 0
-    audio_data_pressurePa_rms           = 0
-    audio_data_pressurePa_rms_calib     = 0
-    audio_data_pressurePa_spl           = 0
+    a_weighted_signal                           = np.zeros(a_weighted_signal.shape)
+    audio_data_pcm_abs                          = np.zeros(audio_data_pcm_abs.shape)
+    audio_data_mV                               = np.zeros(audio_data_mV.shape)
+    audio_data_pressurePa                       = np.zeros(audio_data_pressurePa.shape)
+    audio_data_pressurePa_square                = np.zeros(audio_data_pressurePa_square.shape)
+    audio_data_pressurePa_squareMean.value      = 0
+    audio_data_pressurePa_rms.value             = 0
+    audio_data_pressurePa_rms_calib.value       = 0
+    audio_data_pressurePa_spl.value             = 0
 
     
     # Apply A-weighting to the signal
@@ -301,7 +280,7 @@ def func_calc_SPL():
     audio_data_max_pcm_value_new = np.max(np.abs(a_weighted_signal))
     
     # save if highest of all chunks
-    audio_data_max_pcm_value = max(audio_data_max_pcm_value, audio_data_max_pcm_value_new)
+    audio_data_max_pcm_value.value = max(audio_data_max_pcm_value.value, audio_data_max_pcm_value_new)
     # Example: Process the audio (e.g., calculate RMS for volume level) 
         
     # Absolute values first      
@@ -319,27 +298,24 @@ def func_calc_SPL():
     
     # Convert to RMS - Root mean square
     audio_data_pressurePa_square = audio_data_pressurePa ** 2    
-    audio_data_pressurePa_squareMean =  np.mean(audio_data_pressurePa_square)         
-    if audio_data_pressurePa_squareMean > 0 :
-        audio_data_pressurePa_rms = np.sqrt(audio_data_pressurePa_squareMean)
+    audio_data_pressurePa_squareMean.value = np.mean(audio_data_pressurePa_square)         
+    if audio_data_pressurePa_squareMean.value  > 0 :
+        audio_data_pressurePa_rms.value = np.sqrt(audio_data_pressurePa_squareMean.value)
     else :
-        audio_data_pressurePa_rms = 0           
-    #print(f"audio_data_pressurePa_rms: {audio_data_pressurePa_rms}")   
-    
-    audio_data_pressurePa_rms_calib =audio_data_pressurePa_rms* system_calibration_factor_94db
+        audio_data_pressurePa_rms.value = 0           
+   
+    audio_data_pressurePa_rms_calib.value =audio_data_pressurePa_rms.value * system_calibration_factor_94db.value
     
     # convert RMS to SPL (explained below)
     # Reference pressure in air = 20 µPa
-    if audio_data_pressurePa_rms_calib > 0:
-        audio_data_pressurePa_spl = 20 * np.log10(audio_data_pressurePa_rms_calib / REFERENCE_PRESSURE)    
+    if audio_data_pressurePa_rms_calib.value > 0:
+        audio_data_pressurePa_spl.value = 20 * np.log10(audio_data_pressurePa_rms_calib.value / REFERENCE_PRESSURE)    
     else :
-        audio_data_pressurePa_spl = 0     
+        audio_data_pressurePa_spl.value = 0     
         
-    #print(f"SPL (dB): {audio_data_pressurePa_spl}")
 
 
 def func_process_audio_input():
-    global stream
     global frames
     global is_recording
     global _device_index
@@ -364,6 +340,16 @@ def func_process_audio_input():
     p_func_process_audio_input = psutil.Process(os.getpid())
     p_func_process_audio_input.nice(psutil.REALTIME_PRIORITY_CLASS)  
 
+    # Initialize PyAudio
+    p_loc                                  = pyaudio.PyAudio()
+    # Open stream to read audio from the microphone
+    stream_loc = p_loc.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    input_device_index = _device_index.value ,
+                    frames_per_buffer=CHUNK)
+    print("Audio stream opened\n")
     
     print("recording_process started 1/2\n")
     
@@ -376,9 +362,9 @@ def func_process_audio_input():
     chunk_noise_list_spl = []
     frames = []
     
-    while is_recording:    
+    while is_recording.value:    
         # Read a chunk of audio data
-        data = stream.read(CHUNK)
+        data = stream_loc.read(CHUNK)
       
         # Convert the audio data to a numpy array
         audio_data = np.frombuffer(data, dtype=np.int16)
@@ -391,28 +377,26 @@ def func_process_audio_input():
         
         #chunk counter
         chunk_index_i.value = chunk_index_i.value+1
-        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {chunk_index_i}\n")
+        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {chunk_index_i.value}\n")
         print(f"chunk_index : {chunk_index_i.value}\n")
         
-        #frame.update_dba_display.AppendText(f"  {round(audio_data_pressurePa_spl, 2)} [dbA]\n")
+        #frame.update_dba_display.AppendText(f"  {round(audio_data_pressurePa_spl.value, 2)} [dbA]\n")
         
-        if audio_data_pressurePa_spl > SPL_MAX_DAY_DBA :
+        if audio_data_pressurePa_spl.value > SPL_MAX_DAY_DBA :
             chunk_noise_list_index.append(chunk_index_i.value)
-            chunk_noise_list_spl.append(audio_data_pressurePa_spl)
+            chunk_noise_list_spl.append(audio_data_pressurePa_spl.value)
          
-    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {chunk_index_i}\n")
+    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {chunk_index_i.value}\n")
 
     print("Recording thread stopped.\n")
     #frame.update_status.AppendText("Recording stopped ...\n")
     print(f"chunk_noise_list_index : {chunk_noise_list_index}\n")
 
-    
+    p_loc.terminate()
     
 def func_run_calibration():
     global stream
     global frames
-    global is_recording
-    global  _device_index
     
     global audio_data_max_pcm_value
     global audio_data 
@@ -426,14 +410,10 @@ def func_run_calibration():
     global audio_data_pressurePa_spl
     global system_calibration_factor_94db
 
-    #whole process will run in high priority mode
-    p_func_run_calibration = psutil.Process(os.getpid())
-    p_func_run_calibration.nice(psutil.REALTIME_PRIORITY_CLASS)  
-
 
     calib_arr = []
     i= 0 
-    audio_data_max_pcm_value  = 0
+    audio_data_max_pcm_value.value  = 0
     
     
     while i<CALIB_ITERATION_LENGTH :
@@ -453,10 +433,10 @@ def func_run_calibration():
         func_calc_SPL()
         
         
-        if audio_data_pressurePa_rms > 0 : 
+        if audio_data_pressurePa_rms.value > 0 : 
             
             # 94 dB != 20 log (rms /p_0) :
-            system_calibration_factor_94db_new = (REFERENCE_PRESSURE * (np.power(10, 94/20))) /audio_data_pressurePa_rms
+            system_calibration_factor_94db_new = (REFERENCE_PRESSURE * (np.power(10, 94/20))) /audio_data_pressurePa_rms.value
             print(f"system_calibration_factor_94db_new: {system_calibration_factor_94db_new}\n") 
             
             # Store new value in array 
@@ -468,20 +448,20 @@ def func_run_calibration():
          
     # Check if the input PCM coded signal at 94dB calibration db (which is quite loud) is using the full range of the sint16 signal range
     # Check maximum across all chunks, see while loop
-    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value}\n")
-    if audio_data_max_pcm_value > int(MAX_INT16*0.95) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
-    elif audio_data_max_pcm_value < int(MAX_INT16*0.8) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
+    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value.value}\n")
+    if audio_data_max_pcm_value.value > int(MAX_INT16*0.95) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
+    elif audio_data_max_pcm_value.value < int(MAX_INT16*0.8) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
     else :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
     
     # calculate average calibration factor across all chunks, see while loop
     calib_average = sum(calib_arr) / len(calib_arr)
     
     #store average as new calibration factor
-    system_calibration_factor_94db = calib_average
-    print(f"Averaged system_calibration_factor_94db: {system_calibration_factor_94db}\n") 
+    system_calibration_factor_94db.value = calib_average
+    print(f"Averaged system_calibration_factor_94db.value: {system_calibration_factor_94db.value}\n") 
        
 
 
@@ -490,7 +470,7 @@ def func_check_calibration():
     global stream
     global frames
     global is_recording
-    global  _device_index
+    global _device_index
 
     global max_value
     global audio_data 
@@ -503,10 +483,8 @@ def func_check_calibration():
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
     global system_calibration_factor_94db
-       
-    #whole process will run in high priority mode, but lower than Real Time
-    p_func_run_calibration = psutil.Process(os.getpid())
-    p_func_run_calibration.nice(psutil.HIGH_PRIORITY_CLASS)  
+     
+    
     
     spl_error_arr = []
     spl_error_arr_square = []
@@ -529,10 +507,10 @@ def func_check_calibration():
         func_calc_SPL()
         
         
-        if audio_data_pressurePa_spl > 0 : 
+        if audio_data_pressurePa_spl.value > 0 : 
             
             # calculate error in dB SPL
-            spl_error = 94 - audio_data_pressurePa_spl
+            spl_error = 94 - audio_data_pressurePa_spl.value
             print(f"spl_error: {spl_error}\n")
             
             spl_error_square = np.power(spl_error, 2)
@@ -561,10 +539,10 @@ def func_on_button_start_click(frame):
     
     # Start recording process
     wx.CallAfter(frame.update_status,  "Start button pressed...\n")
-    print(f"is_recording: {is_recording}\n")
-    if not is_recording:
-        is_recording = True
-        print(f"is_recording: {is_recording}\n")
+    print(f"is_recording.value: {is_recording.value}\n")
+    if not is_recording.value:
+        is_recording.value = True
+        print(f"is_recording.value: {is_recording.value}\n")
         # Create a separate processto run the audio processing task
         # The processes are required to decouple the input stream reading from the GUI app 
         
@@ -595,11 +573,11 @@ def func_on_button_start_click(frame):
         wx.CallAfter(frame.update_status,  "recording process is already running 2.\n")
         print("recording process is already running 2.\n")
 
-    print(f"logging process will be started: {is_logging}\n")   
+    print(f"logging process will be started: {is_logging.value}\n")   
     # Start logging thread
-    if not is_logging:
-        is_logging = True
-        print(f"is_logging: {is_logging}\n")
+    if not is_logging.value:
+        is_logging.value = True
+        print(f"is_logging.value: {is_logging.value}\n")
         # Create a separate thread to run the process
         # The thread is required to decouple the input stream reading from the GUI app 
 
@@ -617,7 +595,7 @@ def func_on_button_start_click(frame):
             print("logging process started 2/2\n")
             
             # Update the status text after the task is complete (safely in the main process)
-            wx.CallAfter(frame.update_status,  "logging process started 2...\n")
+            wx.CallAfter(frame.update_status,  "logging process started 2/2\n")
         else:
             wx.CallAfter(frame.update_status,  "logging process is already running.\n")
             print("logging process is already running 1.\n")
@@ -634,13 +612,13 @@ def func_on_button_stop_click(frame):
     frame.button_start.Enable()
     frame.button_stop.Disable()
     
-    print(f"is_recording: {is_recording}\n")
-    is_recording = False
-    print(f"is_recording: {is_recording}\n")
+    print(f"is_recording.value: {is_recording.value}\n")
+    is_recording.value = False
+    print(f"is_recording.value: {is_recording.value}\n")
     
-    print(f"is_logging: {is_logging}\n")
-    is_logging = False
-    print(f"is_logging: {is_logging}\n")
+    print(f"is_logging.value: {is_logging.value}\n")
+    is_logging.value = False
+    print(f"is_logging.value: {is_logging.value}\n")
     
     if frame.recording_process is not None and frame.recording_process.is_alive():
         frame.recording_process.join()  # Wait for the process to finish gracefully
@@ -659,16 +637,17 @@ def func_on_button_runCalib_click(frame):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.runCalib_thread   =multiprocessing.Process(target=func_run_calibration)
+    frame.runCalib_thread   =threading.Thread(target=func_run_calibration)
     frame.runCalib_thread.daemon = True
     frame.runCalib_thread.start()
+
        
        
 def func_on_button_checkCalib_click(frame):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.checkCalib_thread  =multiprocessing.Process(target=func_check_calibration)
+    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration)
     frame.checkCalib_thread.daemon = True
     frame.checkCalib_thread.start()
 
@@ -681,7 +660,6 @@ def func_on_button_exit_click(frame):
 
 
 def func_saveWave_on_noise_event():
-    global p
     global frames
     
     global chunk_index_i
@@ -702,13 +680,13 @@ def func_saveWave_on_noise_event():
     p_func_saveWave_on_noise_event = psutil.Process(os.getpid())
     p_func_saveWave_on_noise_event.nice(psutil.HIGH_PRIORITY_CLASS)  
   
-    print("logging_thread started 1/2\n")
+    print("logging process started 1/2\n")
     
 
     #Start with offset of wave output length
     time.sleep(WAVE_DT_SEC)
     
-    while is_logging:  
+    while is_logging.value:  
         
 
               
@@ -761,7 +739,7 @@ def func_saveWave_on_noise_event():
 
             with wave.open(full_path, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
-                wf.setsampwidth(p.get_sample_size(FORMAT))
+                wf.setsampwidth(sample_size.value)
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
                 print(f"Audio saved as {noise_file_name}\n")
@@ -786,14 +764,13 @@ def func_saveWave_on_noise_event():
 
 
 def func_on_saveWave_exit_click():
-    global p
     global frames
     
     
     # Write the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'wb') as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setsampwidth(sample_size.value)
         wf.setframerate(RATE)
         wf.writeframes(b''.join(frames))
         print(f"Audio saved as {OUTPUT_FILENAME}")
@@ -934,25 +911,44 @@ class MyFrame(wx.Frame):
         global config
         global _device_index
         global system_calibration_factor_94db
+        global p
+        global stream
+        global sample_size
         
-        print(f"_device_index [default]:  {_device_index}")
-        print(f"system_calibration_factor_94db[default]:  {system_calibration_factor_94db}")
+        print(f"_device_index.value [default]:  {_device_index.value}")
+        print(f"system_calibration_factor_94db.value[default]:  {system_calibration_factor_94db.value}")
         
+        
+        # To persist Settings -> Initialise a config object.
+        config  = configparser.ConfigParser()
         # Read Settings
         config.read('config.ini')
         
         # Access values from the config
-        _device_index                   = config.getint('Settings', "_device_index")
-        system_calibration_factor_94db  = config.getfloat('Settings', "system_calibration_factor_94db") 
+        _device_index.value                     = config.getint('Settings', "_device_index")
+        system_calibration_factor_94db.value    = config.getfloat('Settings', "system_calibration_factor_94db") 
 
         # getint is used for integers
-        print(f"_device_index[loaded from config file]:  {_device_index}")
-        print(f"system_calibration_factor_94db[loaded from config file]:  {system_calibration_factor_94db}")
+        print(f"_device_index.value[loaded from config file]:  {_device_index.value}")
+        print(f"system_calibration_factor_94db.value[loaded from config file]:  {system_calibration_factor_94db.value}")
 
         # Print the commit hash
         print("Commit version:", get_commit_version())
         
-    # Create a panel inside the frame
+        # Initialize PyAudio
+        p                   = pyaudio.PyAudio()
+        # Open stream to read audio from the microphone
+        stream              = p.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    input_device_index = _device_index.value ,
+                    frames_per_buffer=CHUNK)
+        sample_size.value     =   p.get_sample_size(FORMAT)
+        print("Audio stream opened\n")
+        
+        
+        # Create a panel inside the frame
         panel = wx.Panel(self)
    
         # To store reference to the thread or process (optional choice)
@@ -973,7 +969,7 @@ class MyFrame(wx.Frame):
         self.checkCalib_queue   = None
               
         # Create a text box for user input
-        self.text_ctrl   = wx.TextCtrl(panel, value=str(_device_index), pos=(290, 40), size=(30, 25))
+        self.text_ctrl   = wx.TextCtrl(panel, value=str(_device_index.value), pos=(290, 40), size=(30, 25))
 
         # Create a button on the panel
         self.button_checkDevices = wx.Button(panel, label="CheckDevices", pos=(200, 10))
@@ -1126,10 +1122,10 @@ if __name__ == "__main__":
         # Add settings to the config
         # Add USB device index
         # Add calibration value
-        config.set("Settings","_device_index", f"{_device_index}")
-        config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db}") 
-        print(f"_device_index [saved]:  {_device_index}")
-        print(f"system_calibration_factor_94db[saved]:  {system_calibration_factor_94db}")
+        config.set("Settings","_device_index", f"{_device_index.value}")
+        config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db.value}") 
+        print(f"_device_index.value [saved]:  {_device_index.value}")
+        print(f"system_calibration_factor_94db.value[saved]:  {system_calibration_factor_94db.value}")
     
         # Save the program state (configuration) to a file
         with open('config.ini', 'w') as configfile:
@@ -1147,19 +1143,19 @@ if __name__ == "__main__":
         chunk_noise_list_index = []
         chunk_noise_list_spl = []
         frames = []
-        is_recording = False
-        is_logging = False
-        audio_data                          = np.array([])
-        audio_data_pcm_abs                  = np.array([])
-        audio_data_mV                       = np.array([])
-        audio_data_mV_calib                 = np.array([])
-        audio_data_pressurePa               = np.array([])
-        audio_data_pressurePa_square        = np.array([])
-        audio_data_pressurePa_squareMean    = 0
-        audio_data_pressurePa_rms           = 0
-        audio_data_pressurePa_rms_calib     = 0
-        audio_data_pressurePa_spl           = 0
-        audio_data_max_pcm_value            = 0
+        is_recording.value = False
+        is_logging.value = False
+        audio_data                                  = np.array([])
+        audio_data_pcm_abs                          = np.array([])
+        audio_data_mV                               = np.array([])
+        audio_data_mV_calib                         = np.array([])
+        audio_data_pressurePa                       = np.array([])
+        audio_data_pressurePa_square                = np.array([])
+        audio_data_pressurePa_squareMean.value      = 0
+        audio_data_pressurePa_rms.value             = 0
+        audio_data_pressurePa_rms_calib.value       = 0
+        audio_data_pressurePa_spl.value             = 0
+        audio_data_max_pcm_value.value              = 0
         
         # Terminate running process, in case they are not closed already.
         #if recording_process.is_alive() :
@@ -1175,8 +1171,8 @@ if __name__ == "__main__":
         print("Application has finished.")
 
 # visual thead debugging
-
-#tracer.stop()  # Stop VizTracer
-#tracer.save("Python_AudioLogger_JSON_LogFile.json")  # Save trace data to a file
+if DEBUG == 1:
+    tracer.stop()  # Stop VizTracer
+    tracer.save("Python_AudioLogger_JSON_LogFile.json")  # Save trace data to a file
 
 ##############################################################################
