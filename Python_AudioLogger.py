@@ -42,22 +42,36 @@ cmd> pip install --upgrade -r requirements.txt
 cmd> pip freeze > requirements.txt
 cmd> pip list --outdated
 '''
-
-import pyaudio
-import numpy as np
-import wave
 import wx # click button GUI
-import matplotlib.pyplot as plt
-import configparser
-import threading
-import time
-import subprocess
-import datetime
-import os
+import pyaudio
 import scipy.signal as signal
 import sympy
 import librosa
 from endolith_weighting_filters import A_weight
+import numpy as np
+import wave
+import matplotlib.pyplot as plt
+import configparser
+import multiprocessing
+import threading
+import subprocess
+import os
+import psutil
+import time
+import datetime
+from viztracer import VizTracer # visual thread debugging
+
+
+# visual thead debugging
+
+#tracer = VizTracer()  # Start VizTracer
+#tracer.start()
+
+# open results in CMD : "vizviewer Python_AudioLogger_JSON_LogFile.json"
+# ZOOM into timeline by pressing CTLR + Mouse wheel
+# and check for status update and display update tasks. 
+# Should be called every 20ms aprox with chunk size 1024 and 48kHz
+
 
 
 # Behringer UMC control panel settings :
@@ -103,21 +117,26 @@ OUTPUT_FILENAME = "output.wav"  # Output WAV file
 OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
-#Global Variables #######################################
+# Global Variables #######################################
+
+# Persist Settings. Create config object.
+config                              = configparser.ConfigParser()
+
+
+# Global Variables SHARE MEMORY SECTION #######################################
+# Defined in shared memory to allow several processes to work on the data : multiprocessing."
 
 # Initialize PyAudio
 p                                   = pyaudio.PyAudio()
 
 # Device list user input 
-_device_index                       = 0
+_device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
 
-# Persist Settings. Create config object.
-config                              = configparser.ConfigParser()
 
 # flag to track recoding state
-is_recording                        = False
+is_recording                        = multiprocessing.Value('b', False)  # 'b' stands for bolean
 # flag to track logging state
-is_logging                          = False
+is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
 
 # Open stream to read audio from the microphone
 
@@ -125,7 +144,7 @@ stream = p.open(format=FORMAT,
     channels=CHANNELS,
     rate=RATE,
     input=True,
-    input_device_index = _device_index ,
+    input_device_index = _device_index.value ,
     frames_per_buffer=CHUNK)
 
 print("Audio stream opened")
@@ -139,20 +158,46 @@ audio_data_mV                       = np.array([])
 audio_data_mV_calib                 = np.array([])
 audio_data_pressurePa               = np.array([])
 audio_data_pressurePa_square        = np.array([])
-audio_data_pressurePa_squareMean    = np.array([])
-audio_data_pressurePa_rms           = np.array([])
-audio_data_pressurePa_rms_calib     = np.array([])
-audio_data_pressurePa_spl           = np.array([])
-audio_data_max_pcm_value            = 0
+audio_data_pressurePa_squareMean    = multiprocessing.Value('d', 0)  # 'd' stands for double / float
+audio_data_pressurePa_rms           = multiprocessing.Value('d', 0)  # 'd' stands for double / float
+audio_data_pressurePa_rms_calib     = multiprocessing.Value('d', 0)  # 'd' stands for double / float
+audio_data_pressurePa_spl           = multiprocessing.Value('d', 0)  # 'd' stands for double / float
+audio_data_max_pcm_value            = multiprocessing.Value('d', 0)  # 'd' stands for double / float
 
 #for output wave file creation / all chunks, complete measurement
 frames                              = []
 
-chunk_index_i                       = 0
-chunk_noise_list_index              = []
-chunk_noise_list_spl                = []
+chunk_index_i                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
+chunk_noise_list_index              = multiprocessing.Array('i', [])  # 'i' stands for integers
+chunk_noise_list_spl                = multiprocessing.Array('i', [])  # 'i' stands for integers
 
-
+'''
+    # input data
+    
+    global a_weighted_signal
+    global p
+    global stream
+    global frames
+    global is_recording
+    global _device_index
+    
+    global max_value
+    global audio_data 
+    global audio_data_pcm_abs
+    global audio_data_mV
+    global audio_data_pressurePa
+    global audio_data_pressurePa_square
+    global audio_data_pressurePa_squareMean
+    global audio_data_pressurePa_rms
+    global audio_data_pressurePa_rms_calib
+    global audio_data_pressurePa_spl
+    global system_calibration_factor_94db
+    
+    global chunk_index_i
+    global chunk_noise_list_index
+    global chunk_noise_list_spl
+    
+'''
 # Global Funtion definitions ##########################################
 def get_commit_version():
     try:
@@ -177,7 +222,6 @@ def func_check_devices():
 
 def func_on_button_setDevices_click(frame):
     global _device_index 
-    global p
     
     _device_index = 0
     min_range = 0
@@ -196,9 +240,7 @@ def func_on_button_setDevices_click(frame):
 
 def apply_a_weighting(audio_data):
     """Apply the A-weighting filter to the signal"""
-    
-    # A-weighting filter design
-    # b, a = signal.iirfilter(4, A_WEIGHTING_FREQUENCY, btype='bandpass', ftype='butter', fs=RATE)
+
     
     # convert to float for filtering
     float_array  = audio_data.astype(np.float32)
@@ -239,15 +281,15 @@ def func_calc_SPL():
     
     
     # reset output arrays :
-    a_weighted_signal = np.zeros(a_weighted_signal.shape)
-    audio_data_pcm_abs = np.zeros(audio_data_pcm_abs.shape)
-    audio_data_mV = np.zeros(audio_data_mV.shape)
-    audio_data_pressurePa = np.zeros(audio_data_pressurePa.shape)
-    audio_data_pressurePa_square = np.zeros(audio_data_pressurePa_square.shape)
-    audio_data_pressurePa_squareMean = np.zeros(audio_data_pressurePa_squareMean.shape)
-    audio_data_pressurePa_rms = np.zeros(audio_data_pressurePa_rms.shape)
-    audio_data_pressurePa_rms_calib = np.zeros(audio_data_pressurePa_rms_calib.shape)
-    audio_data_pressurePa_spl = np.zeros(audio_data_pressurePa_spl.shape)
+    a_weighted_signal                   = np.zeros(a_weighted_signal.shape)
+    audio_data_pcm_abs                  = np.zeros(audio_data_pcm_abs.shape)
+    audio_data_mV                       = np.zeros(audio_data_mV.shape)
+    audio_data_pressurePa               = np.zeros(audio_data_pressurePa.shape)
+    audio_data_pressurePa_square        = np.zeros(audio_data_pressurePa_square.shape)
+    audio_data_pressurePa_squareMean    = 0
+    audio_data_pressurePa_rms           = 0
+    audio_data_pressurePa_rms_calib     = 0
+    audio_data_pressurePa_spl           = 0
 
     
     # Apply A-weighting to the signal
@@ -296,8 +338,7 @@ def func_calc_SPL():
     #print(f"SPL (dB): {audio_data_pressurePa_spl}")
 
 
-def func_process_audio_input(frame):
-    global p
+def func_process_audio_input():
     global stream
     global frames
     global is_recording
@@ -319,11 +360,18 @@ def func_process_audio_input(frame):
     global chunk_noise_list_index
     global chunk_noise_list_spl
     
-    print("recording_thread started 1/2")
+    #whole process will run in high priority mode
+    p_func_process_audio_input = psutil.Process(os.getpid())
+    p_func_process_audio_input.nice(psutil.REALTIME_PRIORITY_CLASS)  
+
     
+    print("recording_process started 1/2\n")
+    
+    # frame.update_status.AppendText  -> updateAfter is replaced by AppendText because we use a queue as argument.
+    # Because theading has been replaced by processes
     
     #reset audio input related lists and counters
-    chunk_index_i = 0    # counter of processed chunks
+    chunk_index_i.value = 0    # counter of processed chunks
     chunk_noise_list_index = []
     chunk_noise_list_spl = []
     frames = []
@@ -342,26 +390,25 @@ def func_process_audio_input(frame):
         func_calc_SPL()
         
         #chunk counter
-        chunk_index_i = chunk_index_i+1
-        wx.CallAfter(frame.update_status,  f"Recording running. Number of chunks processed: {chunk_index_i}")
-        print(f"chunk_index : {chunk_index_i}")
+        chunk_index_i.value = chunk_index_i.value+1
+        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {chunk_index_i}\n")
+        print(f"chunk_index : {chunk_index_i.value}\n")
+        
+        #frame.update_dba_display.AppendText(f"  {round(audio_data_pressurePa_spl, 2)} [dbA]\n")
         
         if audio_data_pressurePa_spl > SPL_MAX_DAY_DBA :
-            chunk_noise_list_index.append(chunk_index_i)
+            chunk_noise_list_index.append(chunk_index_i.value)
             chunk_noise_list_spl.append(audio_data_pressurePa_spl)
-        
-    wx.CallAfter(frame.update_status,  f"Recording terminated. Number of chunks processed: {chunk_index_i}")    
+         
+    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {chunk_index_i}\n")
 
-
-    print("Recording thread stopped.")
-    wx.CallAfter(frame.update_status,  "Recording stopped ...")
-
-    print(f"chunk_noise_list_index : {chunk_noise_list_index}")
+    print("Recording thread stopped.\n")
+    #frame.update_status.AppendText("Recording stopped ...\n")
+    print(f"chunk_noise_list_index : {chunk_noise_list_index}\n")
 
     
     
 def func_run_calibration():
-    global p
     global stream
     global frames
     global is_recording
@@ -378,6 +425,10 @@ def func_run_calibration():
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
     global system_calibration_factor_94db
+
+    #whole process will run in high priority mode
+    p_func_run_calibration = psutil.Process(os.getpid())
+    p_func_run_calibration.nice(psutil.REALTIME_PRIORITY_CLASS)  
 
 
     calib_arr = []
@@ -406,37 +457,36 @@ def func_run_calibration():
             
             # 94 dB != 20 log (rms /p_0) :
             system_calibration_factor_94db_new = (REFERENCE_PRESSURE * (np.power(10, 94/20))) /audio_data_pressurePa_rms
-            print(f"system_calibration_factor_94db_new: {system_calibration_factor_94db_new}") 
+            print(f"system_calibration_factor_94db_new: {system_calibration_factor_94db_new}\n") 
             
             # Store new value in array 
             calib_arr.append(system_calibration_factor_94db_new)
             
         else :
-            print("SPL or Pa equal to zero in this chunk. Check sound input ! ") 
+            print("SPL or Pa equal to zero in this chunk. Check sound input ! \n") 
         
          
     # Check if the input PCM coded signal at 94dB calibration db (which is quite loud) is using the full range of the sint16 signal range
     # Check maximum across all chunks, see while loop
-    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value}")
+    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value}\n")
     if audio_data_max_pcm_value > int(MAX_INT16*0.95) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)       
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
     elif audio_data_max_pcm_value < int(MAX_INT16*0.8) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !","Info", wx.OK | wx.ICON_INFORMATION)      
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
     else :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. PreAmp GAIN OK !","Info", wx.OK | wx.ICON_INFORMATION)
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
     
     # calculate average calibration factor across all chunks, see while loop
     calib_average = sum(calib_arr) / len(calib_arr)
     
     #store average as new calibration factor
     system_calibration_factor_94db = calib_average
-    print(f"Averaged system_calibration_factor_94db: {system_calibration_factor_94db}") 
+    print(f"Averaged system_calibration_factor_94db: {system_calibration_factor_94db}\n") 
        
 
 
 
 def func_check_calibration():
-    global p
     global stream
     global frames
     global is_recording
@@ -454,8 +504,10 @@ def func_check_calibration():
     global audio_data_pressurePa_spl
     global system_calibration_factor_94db
        
+    #whole process will run in high priority mode, but lower than Real Time
+    p_func_run_calibration = psutil.Process(os.getpid())
+    p_func_run_calibration.nice(psutil.HIGH_PRIORITY_CLASS)  
     
-
     spl_error_arr = []
     spl_error_arr_square = []
     
@@ -481,7 +533,7 @@ def func_check_calibration():
             
             # calculate error in dB SPL
             spl_error = 94 - audio_data_pressurePa_spl
-            print(f"spl_error: {spl_error}")
+            print(f"spl_error: {spl_error}\n")
             
             spl_error_square = np.power(spl_error, 2)
                                                 
@@ -490,12 +542,12 @@ def func_check_calibration():
             spl_error_arr.append(spl_error)
             
         else :
-            print("SPL or Pa equal to zero in this chunk. Check sound input ! ") 
+            print("SPL or Pa equal to zero in this chunk. Check sound input !\n ") 
 
                           
     # calculate root mean square error 
     spl_error_average = np.sqrt(np.average(spl_error_square ))
-    print(f"spl_error_average: {spl_error_average}")
+    print(f"spl_error_average: {spl_error_average}\n")
 
        
 
@@ -507,63 +559,72 @@ def func_on_button_start_click(frame):
     frame.button_start.Disable()
     frame.button_stop.Enable()
     
-    # Start recording thread
-    wx.CallAfter(frame.update_status,  "Start button pressed...")
-    print(f"is_recording: {is_recording}")
+    # Start recording process
+    wx.CallAfter(frame.update_status,  "Start button pressed...\n")
+    print(f"is_recording: {is_recording}\n")
     if not is_recording:
         is_recording = True
-        print(f"is_recording: {is_recording}")
-        # Create a separate thread to run the process
-        # The thread is required to decouple the input stream reading from the GUI app 
-
-        if frame.recording_thread is None or not frame.recording_thread.is_alive():
-            print("recording thread will be created now ")
+        print(f"is_recording: {is_recording}\n")
+        # Create a separate processto run the audio processing task
+        # The processes are required to decouple the input stream reading from the GUI app 
+        
+        print("recording process will be created now.\n")
+        if frame.recording_process is None or not frame.recording_process.is_alive():
+            try:
+                print("Creating and starting recording process...\n")
+                frame.recording_queue  = multiprocessing.Queue()
+                frame.recording_process =multiprocessing.Process(target=func_process_audio_input)
+                print("recording process created\n")
             
-            # Argument : frame. Required to create a thread from inside the GUI that serves as longrunning
-            # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
-            frame.recording_thread =threading.Thread(target=func_process_audio_input, args=(frame,))
-            print("recording thread created")
+                # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
+                # background task. And must refresh the GUI (frame instance) from inside the backround task via AppendText
+       
+                frame.recording_process.start()
+                print("recording process started\n")
             
-            frame.recording_thread.start()
-            print()
-            print("recording thread started 2/2")
+                # Update the status text after the task is complete (safely in the main process)  
+                wx.CallAfter(frame.update_status,  "recording process started 2/2\n")
             
-            # Update the status text after the task is complete (safely in the main thread)
-            wx.CallAfter(frame.update_status,  "recording thread started 2...")
+            except Exception as e:
+                print(f"Error starting recording process : {e}\n")
+            
         else:
-            wx.CallAfter(frame.update_status,  "recording thread is already running.")
-            print("recording thread is already running 1.")
+            wx.CallAfter(frame.update_status,  "recording process is already running 1.\n")
+            print("recording process is already running 1.\n")
     else:
-        wx.CallAfter(frame.update_status,  "recording thread is already running.")
-        print("recording thread is already running 2.")
+        wx.CallAfter(frame.update_status,  "recording process is already running 2.\n")
+        print("recording process is already running 2.\n")
 
-    print(f"logging thread will be started: {is_logging}")
-    
+    print(f"logging process will be started: {is_logging}\n")   
     # Start logging thread
     if not is_logging:
         is_logging = True
-        print(f"is_logging: {is_logging}")
+        print(f"is_logging: {is_logging}\n")
         # Create a separate thread to run the process
         # The thread is required to decouple the input stream reading from the GUI app 
 
-        if frame.logging_thread is None or not frame.logging_thread.is_alive():
-            print("logging thread will be created now ")
+        if frame.logging_process is None or not frame.logging_process.is_alive():
+            print("logging process will be created now.\n")
             
-            # Argument : frame. Required to create a thread from inside the GUI that serves as longrunning
+            # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
-            frame.logging_thread =threading.Thread(target=func_saveWave_on_noise_event, args=(frame,))
-            print("logging thread created")
-            frame.logging_thread.start()
-            print("logging thread started 2/2")
-            # Update the status text after the task is complete (safely in the main thread)
-            wx.CallAfter(frame.update_status,  "logging Thread started 2...")
+           
+            frame.logging_queue  = multiprocessing.Queue()
+            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event)
+            print("logging process created\n")
+ 
+            frame.logging_process.start()
+            print("logging process started 2/2\n")
+            
+            # Update the status text after the task is complete (safely in the main process)
+            wx.CallAfter(frame.update_status,  "logging process started 2...\n")
         else:
-            wx.CallAfter(frame.update_status,  "logging Thread is already running.")
-            print("logging Thread is already running 1.")
+            wx.CallAfter(frame.update_status,  "logging process is already running.\n")
+            print("logging process is already running 1.\n")
     else:
-        wx.CallAfter(frame.update_status,  "logging Thread is already running.")
-        print("logging Thread is already running 2.")
-        #func_saveWave_on_noise_event()
+        wx.CallAfter(frame.update_status,  "logging process is already running.\n")
+        print("logging Thread is already running 2.\n")
+
 
 def func_on_button_stop_click(frame):
     global is_recording
@@ -573,32 +634,32 @@ def func_on_button_stop_click(frame):
     frame.button_start.Enable()
     frame.button_stop.Disable()
     
-    print(f"is_recording: {is_recording}")
+    print(f"is_recording: {is_recording}\n")
     is_recording = False
-    print(f"is_recording: {is_recording}")
+    print(f"is_recording: {is_recording}\n")
     
-    print(f"is_logging: {is_logging}")
+    print(f"is_logging: {is_logging}\n")
     is_logging = False
-    print(f"is_logging: {is_logging}")
+    print(f"is_logging: {is_logging}\n")
     
-    if frame.recording_thread is not None and frame.recording_thread.is_alive():
-        frame.recording_thread.join()  # Wait for the thread to finish gracefully
-        wx.CallAfter(frame.update_status,  "Recording Thread stopped.")
+    if frame.recording_process is not None and frame.recording_process.is_alive():
+        frame.recording_process.join()  # Wait for the process to finish gracefully
+        wx.CallAfter(frame.update_status,  "Recording process stopped.\n")
     else:
-        wx.CallAfter(frame.update_status,  "No Recording thread is running.")
+        wx.CallAfter(frame.update_status,  "No Recording process is running.\n")
     
-    if frame.logging_thread is not None and frame.logging_thread.is_alive():
-        frame.logging_thread.join()  # Wait for the thread to finish gracefully
-        wx.CallAfter(frame.update_status,  "logging Thread stopped.")
+    if frame.logging_process is not None and frame.logging_process.is_alive():
+        frame.logging_process.join()  # Wait for the process to finish gracefully
+        wx.CallAfter(frame.update_status,  "logging process stopped.\n")
     else:
-        wx.CallAfter(frame.update_status,  "No logging thread is running.")
+        wx.CallAfter(frame.update_status,  "No logging process is running.\n")
    
 
 def func_on_button_runCalib_click(frame):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.runCalib_thread   =threading.Thread(target=func_run_calibration)
+    frame.runCalib_thread   =multiprocessing.Process(target=func_run_calibration)
     frame.runCalib_thread.daemon = True
     frame.runCalib_thread.start()
        
@@ -607,7 +668,7 @@ def func_on_button_checkCalib_click(frame):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration)
+    frame.checkCalib_thread  =multiprocessing.Process(target=func_check_calibration)
     frame.checkCalib_thread.daemon = True
     frame.checkCalib_thread.start()
 
@@ -619,7 +680,7 @@ def func_on_button_exit_click(frame):
 
 
 
-def func_saveWave_on_noise_event(frame):
+def func_saveWave_on_noise_event():
     global p
     global frames
     
@@ -637,7 +698,11 @@ def func_saveWave_on_noise_event(frame):
     
     noise_frames = []
   
-    print("logging_thread started 1/2")
+    #whole process will run in high priority mode, but lower than the Audio processing task
+    p_func_saveWave_on_noise_event = psutil.Process(os.getpid())
+    p_func_saveWave_on_noise_event.nice(psutil.HIGH_PRIORITY_CLASS)  
+  
+    print("logging_thread started 1/2\n")
     
 
     #Start with offset of wave output length
@@ -650,7 +715,7 @@ def func_saveWave_on_noise_event(frame):
         # check if events are detected and stored in the list
         if len(chunk_noise_list_index) > 0 :
             print()
-            print("New Recording event: ")
+            print("New Recording event: \n")
 
         
             #identify max spl value and repsective hunk number 
@@ -663,16 +728,16 @@ def func_saveWave_on_noise_event(frame):
             start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
             stop_chunk = max_spl_chunk_index+CHUNK_DNUM
         
-            # Wait for minimuù time CHUNK_DNUM before saveing to add delta to the wave. 
-            while stop_chunk>chunk_index_i :
-                i = stop_chunk-chunk_index_i
+            # Wait for minimum time CHUNK_DNUM before saveing to add delta to the wave. 
+            while chunk_index_i.value < stop_chunk :
+                i = stop_chunk-chunk_index_i.value
             
             noise_frames = frames[start_chunk:stop_chunk]
         
-            print(f"Current chunk processed is : {chunk_index_i}")
-            print(f"Events detected : {chunk_noise_list_index}")
-            print(f"start_chunk is : {start_chunk}")
-            print(f"stop_chunk is : {stop_chunk}")
+            print(f"Current chunk processed is : {chunk_index_i.value}\n")
+            print(f"Events detected : {chunk_noise_list_index}\n")
+            print(f"start_chunk is : {start_chunk}\n")
+            print(f"stop_chunk is : {stop_chunk}\n")
             
             # Get the current local time
             current_time = datetime.datetime.now()
@@ -699,7 +764,7 @@ def func_saveWave_on_noise_event(frame):
                 wf.setsampwidth(p.get_sample_size(FORMAT))
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
-                print(f"Audio saved as {noise_file_name}")
+                print(f"Audio saved as {noise_file_name}\n")
 
 
             #erase noise event arrays
@@ -715,7 +780,7 @@ def func_saveWave_on_noise_event(frame):
         
             #remove chunks from wave output which are already treated. To free local resources.
             frames = frames[start_chunk:]
-            wx.CallAfter(frame.update_status,  f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")
+            #frame.update_status.AppendText(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")
             print()
 
 
@@ -863,7 +928,7 @@ def func_on_saveWave_exit_click():
 # Define the main application frame
 class MyFrame(wx.Frame):
     def __init__(self, parent, title):
-        super().__init__(parent, title=title, size=(350, 350))
+        super().__init__(parent, title=title, size=(350, 550))
         
         # Load settings from previous sessions
         global config
@@ -887,20 +952,28 @@ class MyFrame(wx.Frame):
         # Print the commit hash
         print("Commit version:", get_commit_version())
         
-        # Create a panel inside the frame
+    # Create a panel inside the frame
         panel = wx.Panel(self)
    
-        # To store reference to the thread
+        # To store reference to the thread or process (optional choice)
         self.recording_thread   = None
-        self.logging_thread     = None 
+        self.recording_process  = None
+        self.recording_queue    = None
+        
+        self.logging_thread     = None
+        self.logging_process    = None  
+        self.logging_queue      = None
+        
         self.runCalib_thread    = None
+        self.runCalib_process   = None
+        self.runCalib_queue     = None
+                
         self.checkCalib_thread  = None
+        self.checkCalib_process = None
+        self.checkCalib_queue   = None
               
         # Create a text box for user input
-        self.text_ctrl   = wx.TextCtrl(panel, pos=(290, 40), size=(30, 25))
-
-        # Create text output field
-        self.status_text = wx.StaticText(panel, label="Status : Start", pos=(10, 230), size=(300, 50))
+        self.text_ctrl   = wx.TextCtrl(panel, value=str(_device_index), pos=(290, 40), size=(30, 25))
 
         # Create a button on the panel
         self.button_checkDevices = wx.Button(panel, label="CheckDevices", pos=(200, 10))
@@ -919,12 +992,23 @@ class MyFrame(wx.Frame):
  
         # Create a button on the panel
         self.button_checkCalib = wx.Button(panel, label="Check Calibration!", pos=(10, 110))
+
+        # Create a button on the panel
+        self.button_saveWave = wx.Button(panel, label="Save and Plot Wave File [check signal]", pos=(10, 140))
+  
+  
+        # Create text output field
+        self.status_text = wx.StaticText(panel, label="Status:", pos=(10, 180), size=(300, 50))
+        
+        # Create text output field
+        self.dba_display = wx.StaticText(panel, label="dbA:", pos=(10, 210), size=(33, 50))
+        # Set a larger font
+        font_large = wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        self.dba_display.SetFont(font_large)
         
         # Create a button on the panel
-        self.button_exit = wx.Button(panel, label="Close Application", pos=(190, 280))
+        self.button_exit = wx.Button(panel, label="Close Application", pos=(190, 400))
  
-        # Create a button on the panel
-        self.button_saveWave = wx.Button(panel, label="Save & Plot Wave File [check signal]", pos=(10, 180))
 
         
         ##################################################################
@@ -962,6 +1046,10 @@ class MyFrame(wx.Frame):
     def update_status(self, text):
         # Safely append text to the TextCtrl
         self.status_text.SetLabel(text)
+
+    def update_dba_display(self, text):
+        # Safely append text to the TextCtrl
+        self.dba_display.SetLabel(text)
 
 
     def on_button_checkDevices_click(self, event):
@@ -1012,17 +1100,24 @@ class MyFrame(wx.Frame):
 
 class MyApp(wx.App):
     def OnInit(self):
-        self.frame = MyFrame(None, title="Task Scheduler GUI")
+        self.frame = MyFrame(None, title="Task Scheduler GUI")      
         return True
 
 # Main GUI application loop ###################################
 if __name__ == "__main__":
+    
+    # required to start new process under windows systems
+    multiprocessing.set_start_method("spawn", force=True)  # optional but clear
+    
     app = MyApp()
 
     # Wrap the main event loop in a try-except block
     try:
+
+        
         app.MainLoop()
-    
+        
+        
     except Exception as e:
         print(f"An error occurred: {e}")
         # You can add additional cleanup or logging here if needed
@@ -1048,7 +1143,7 @@ if __name__ == "__main__":
     
         # Close audio interface
         p.terminate()
-        chunk_index_i = 0    # counter of processed chunks
+        chunk_index_i.value = 0    # counter of processed chunks
         chunk_noise_list_index = []
         chunk_noise_list_spl = []
         frames = []
@@ -1060,12 +1155,28 @@ if __name__ == "__main__":
         audio_data_mV_calib                 = np.array([])
         audio_data_pressurePa               = np.array([])
         audio_data_pressurePa_square        = np.array([])
-        audio_data_pressurePa_squareMean    = np.array([])
-        audio_data_pressurePa_rms           = np.array([])
-        audio_data_pressurePa_rms_calib     = np.array([])
-        audio_data_pressurePa_spl           = np.array([])
+        audio_data_pressurePa_squareMean    = 0
+        audio_data_pressurePa_rms           = 0
+        audio_data_pressurePa_rms_calib     = 0
+        audio_data_pressurePa_spl           = 0
         audio_data_max_pcm_value            = 0
+        
+        # Terminate running process, in case they are not closed already.
+        #if recording_process.is_alive() :
+        #    print("Timeout reached, terminating process...")
+        #    app.recording.terminate()
+        #   app.recording.join()
+    
+        #if logging_process.is_alive() :
+        #   print("Timeout reached, terminating process...")
+        #   app.logging.terminate()
+        #   app.logging.join()
     
         print("Application has finished.")
-  
+
+# visual thead debugging
+
+#tracer.stop()  # Stop VizTracer
+#tracer.save("Python_AudioLogger_JSON_LogFile.json")  # Save trace data to a file
+
 ##############################################################################
