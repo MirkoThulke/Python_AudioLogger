@@ -364,8 +364,8 @@ def func_process_audio_input(data_dictionary):
     chunk_noise_list_spl = []
     frames = []
     
-    print(f"is_recording.value: {is_recording.value}\n")
-    while data_dictionary["is_recording"]==True :
+    print(f"is_recording: {data_dictionary['is_recording']}\n")
+    while data_dictionary['is_recording']==True :
         # Read a chunk of audio data
         data = stream_loc.read(CHUNK)
       
@@ -532,7 +532,7 @@ def func_check_calibration():
 
        
 
-def func_on_button_start_click(frame):
+def func_on_button_start_click(frame, datadictionary):
     global is_recording
     global is_logging 
     
@@ -542,10 +542,10 @@ def func_on_button_start_click(frame):
     
     # Start recording process
     wx.CallAfter(frame.update_status,  "Start button pressed...\n")
-    print(f"is_recording.value: {is_recording.value}\n")
-    if not is_recording.value:
-        is_recording.value = True
-        print(f"is_recording.value: {is_recording.value}\n")
+    print(f"is_recording: {data_dictionary['is_recording']}\n")
+    if not data_dictionary['is_recording']:
+        data_dictionary['is_recording'] = True
+        print(f"is_recording: {data_dictionary['is_recording']}\n")
         # Create a separate processto run the audio processing task
         # The processes are required to decouple the input stream reading from the GUI app 
         
@@ -1065,7 +1065,7 @@ class MyFrame(wx.Frame):
 
     def on_button_start_click(self, event):
         # Call function
-        func_on_button_start_click(self)
+        func_on_button_start_click(self, data_dictionary)
 
             
     def on_button_stop_click(self, event):       
