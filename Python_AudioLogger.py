@@ -128,6 +128,8 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 # values must be accessed via .value postfix ! 
 # arrays do not require to have a postfix.
 
+
+
 # Device list user input 
 _device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
 
@@ -315,9 +317,9 @@ def func_calc_SPL():
         
 
 
-def func_process_audio_input():
+def func_process_audio_input(data_dictionary):
     global frames
-    global is_recording
+    #global is_recording
     global _device_index
     
     global max_value
@@ -349,7 +351,7 @@ def func_process_audio_input():
                     input=True,
                     input_device_index = _device_index.value ,
                     frames_per_buffer=CHUNK)
-    print("Audio stream opened\n")
+    print("Audio stream opened [recording]\n")
     
     print("recording_process started 1/2\n")
     
@@ -362,7 +364,8 @@ def func_process_audio_input():
     chunk_noise_list_spl = []
     frames = []
     
-    while is_recording.value:    
+    print(f"is_recording.value: {is_recording.value}\n")
+    while data_dictionary["is_recording"]==True :
         # Read a chunk of audio data
         data = stream_loc.read(CHUNK)
       
@@ -551,7 +554,7 @@ def func_on_button_start_click(frame):
             try:
                 print("Creating and starting recording process...\n")
                 frame.recording_queue  = multiprocessing.Queue()
-                frame.recording_process =multiprocessing.Process(target=func_process_audio_input)
+                frame.recording_process =multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary,))
                 print("recording process created\n")
             
                 # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
@@ -945,7 +948,7 @@ class MyFrame(wx.Frame):
                     input_device_index = _device_index.value ,
                     frames_per_buffer=CHUNK)
         sample_size.value     =   p.get_sample_size(FORMAT)
-        print("Audio stream opened\n")
+        print("Audio stream opened [Init]\n")
         
         
         # Create a panel inside the frame
@@ -1104,6 +1107,20 @@ if __name__ == "__main__":
     
     # required to start new process under windows systems
     multiprocessing.set_start_method("spawn", force=True)  # optional but clear
+    
+    # Defined in shared memory to allow several processes to work on the data : multiprocessing."
+    # values must be accessed via .value postfix ! 
+    # arrays do not require to have a postfix.
+
+    # DataDictionary
+    manager = multiprocessing.Manager()
+
+    data_dictionary = manager.dict(
+        _device_index                           = 0,        # Device list user input 
+        is_recording                            = False,
+        is_logging                              = False
+    )
+        
     
     app = MyApp()
 
