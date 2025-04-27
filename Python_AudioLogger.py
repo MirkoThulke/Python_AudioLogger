@@ -139,10 +139,10 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 #is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
 # 'i' stands for integer 
 # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
-system_calibration_factor_94db      = multiprocessing.Value('f', 1.0)
+#system_calibration_factor_94db      = multiprocessing.Value('f', 1.0)
 
 # audio data extraceted from chunk in np format.
-audio_data                          = np.array([])
+#audio_data                          = np.array([])
 a_weighted_signal                   = np.array([])
 audio_data_pcm_abs                  = np.array([])
 audio_data_mV                       = np.array([])
@@ -188,7 +188,7 @@ def get_commit_version():
     except subprocess.CalledProcessError:
         return "Not a git repository or error retrieving commit."
  
-def func_check_devices():
+def func_check_devices(data_dictionary):
     global p
     i=0
     
@@ -200,7 +200,7 @@ def func_check_devices():
 
 
 
-def func_on_button_setDevices_click(frame):
+def func_on_button_setDevices_click(frame, data_dictionary):
     global p
 
     
@@ -219,12 +219,12 @@ def func_on_button_setDevices_click(frame):
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
 
-def apply_a_weighting(audio_data):
+def apply_a_weighting(data_dictionary):
     """Apply the A-weighting filter to the signal"""
 
     
     # convert to float for filtering
-    float_array  = audio_data.astype(np.float32)
+    float_array  = data_dictionary['audio_data'].astype(np.float32)
     
 
     # Apply A-weighting
@@ -241,12 +241,11 @@ def apply_a_weighting(audio_data):
     return ( int_array )
 
 
-def func_calc_SPL():
+def func_calc_SPL(data_dictionary):
  
     # input data
-    global audio_data
+
     global a_weighted_signal
-    global system_calibration_factor_94db
     
     #output data
     global audio_data_max_pcm_value
@@ -276,7 +275,7 @@ def func_calc_SPL():
     # Apply A-weighting to the signal
     # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
     # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
-    a_weighted_signal = apply_a_weighting(audio_data)
+    a_weighted_signal = apply_a_weighting(data_dictionary)
 
     # Check  the maximum absolute value
     audio_data_max_pcm_value_new = np.max(np.abs(a_weighted_signal))
@@ -306,7 +305,7 @@ def func_calc_SPL():
     else :
         audio_data_pressurePa_rms.value = 0           
    
-    audio_data_pressurePa_rms_calib.value =audio_data_pressurePa_rms.value * system_calibration_factor_94db.value
+    audio_data_pressurePa_rms_calib.value =audio_data_pressurePa_rms.value * data_dictionary['system_calibration_factor_94db']
     
     # convert RMS to SPL (explained below)
     # Reference pressure in air = 20 µPa
@@ -321,7 +320,7 @@ def func_process_audio_input(data_dictionary):
     global frames
 
     global max_value
-    global audio_data 
+
     global audio_data_pcm_abs
     global audio_data_mV
     global audio_data_pressurePa
@@ -330,7 +329,6 @@ def func_process_audio_input(data_dictionary):
     global audio_data_pressurePa_rms
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
-    global system_calibration_factor_94db
     
     global chunk_index_i
     global chunk_noise_list_index
@@ -368,13 +366,13 @@ def func_process_audio_input(data_dictionary):
         data = stream_loc.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        audio_data = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
         frames.append(data)
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL()
+        func_calc_SPL(data_dictionary)
         
         #chunk counter
         chunk_index_i.value = chunk_index_i.value+1
@@ -395,12 +393,12 @@ def func_process_audio_input(data_dictionary):
 
     p_loc.terminate()
     
-def func_run_calibration():
+def func_run_calibration(data_dictionary):
     global stream
     global frames
     
     global audio_data_max_pcm_value
-    global audio_data 
+
     global audio_data_pcm_abs
     global audio_data_mV
     global audio_data_pressurePa
@@ -409,7 +407,6 @@ def func_run_calibration():
     global audio_data_pressurePa_rms
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
-    global system_calibration_factor_94db
 
 
     calib_arr = []
@@ -425,13 +422,13 @@ def func_run_calibration():
         data = stream.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        audio_data = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
         frames.append(data)
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL()
+        func_calc_SPL(data_dictionary)
         
         
         if audio_data_pressurePa_rms.value > 0 : 
@@ -461,18 +458,18 @@ def func_run_calibration():
     calib_average = sum(calib_arr) / len(calib_arr)
     
     #store average as new calibration factor
-    system_calibration_factor_94db.value = calib_average
-    print(f"Averaged system_calibration_factor_94db.value: {system_calibration_factor_94db.value}\n") 
+    data_dictionary['system_calibration_factor_94db'] = calib_average
+    print(f"Averaged data_dictionary['system_calibration_factor_94db']: {data_dictionary['system_calibration_factor_94db']}\n") 
        
 
 
 
-def func_check_calibration():
+def func_check_calibration(data_dictionary):
     global stream
     global frames
 
     global max_value
-    global audio_data 
+
     global audio_data_pcm_abs
     global audio_data_mV
     global audio_data_pressurePa
@@ -481,7 +478,7 @@ def func_check_calibration():
     global audio_data_pressurePa_rms
     global audio_data_pressurePa_rms_calib
     global audio_data_pressurePa_spl
-    global system_calibration_factor_94db
+
      
     
     
@@ -497,13 +494,13 @@ def func_check_calibration():
         data = stream.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        audio_data = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
         frames.append(data)
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL()
+        func_calc_SPL(data_dictionary)
         
         
         if audio_data_pressurePa_spl.value > 0 : 
@@ -528,7 +525,7 @@ def func_check_calibration():
 
        
 
-def func_on_button_start_click(frame, datadictionary):
+def func_on_button_start_click(frame, data_dictionary):
 
     # Enable / Disable buttons
     frame.button_start.Disable()
@@ -585,7 +582,7 @@ def func_on_button_start_click(frame, datadictionary):
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
            
             frame.logging_queue  = multiprocessing.Queue()
-            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event)
+            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary,))
             print("logging process created\n")
  
             frame.logging_process.start()
@@ -601,7 +598,7 @@ def func_on_button_start_click(frame, datadictionary):
         print("logging Thread is already running 2.\n")
 
 
-def func_on_button_stop_click(frame):
+def func_on_button_stop_click(frame, data_dictionary):
 
     
     # Enable / Disable buttons
@@ -629,33 +626,33 @@ def func_on_button_stop_click(frame):
         wx.CallAfter(frame.update_status,  "No logging process is running.\n")
    
 
-def func_on_button_runCalib_click(frame):
+def func_on_button_runCalib_click(frame, data_dictionary):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.runCalib_thread   =threading.Thread(target=func_run_calibration)
+    frame.runCalib_thread   =threading.Thread(target=func_run_calibration, args=(data_dictionary,))
     frame.runCalib_thread.daemon = True
     frame.runCalib_thread.start()
 
        
        
-def func_on_button_checkCalib_click(frame):
+def func_on_button_checkCalib_click(frame, data_dictionary):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration)
+    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration, args=(data_dictionary,))
     frame.checkCalib_thread.daemon = True
     frame.checkCalib_thread.start()
 
 
-def func_on_button_exit_click(frame):
+def func_on_button_exit_click(frame, data_dictionary):
 
     # Close the parent application and the GUI event loop (-> indicated by self)
     frame.Close()
 
 
 
-def func_saveWave_on_noise_event():
+def func_saveWave_on_noise_event(data_dictionary):
     global frames
     
     global chunk_index_i
@@ -758,7 +755,7 @@ def func_saveWave_on_noise_event():
 
 
 
-def func_on_saveWave_exit_click():
+def func_on_saveWave_exit_click(data_dictionary):
     global frames
     
     
@@ -784,9 +781,9 @@ def func_on_saveWave_exit_click():
     # read audio data and apply weighting filter    
     # Convert raw byte data into a numpy array
     # For 16-bit audio (common for WAV), use np.int16
-    audio_data = np.frombuffer(raw_data, dtype=np.int16)
+    data_dictionary['audio_data'] = np.frombuffer(raw_data, dtype=np.int16)
     # A-weighted audio data
-    audio_data_weighted =   apply_a_weighting(audio_data )
+    audio_data_weighted =   apply_a_weighting(data_dictionary)
     # Create a time axis for plotting
     time = np.linspace(0, num_frames / sample_rate, num_frames)
    
@@ -794,7 +791,7 @@ def func_on_saveWave_exit_click():
    
     # FFT  
     # Perform FFT on the audio signal
-    fft_signal = np.fft.fft(audio_data)
+    fft_signal = np.fft.fft(data_dictionary['audio_data'])
     # Perform FFT on the audio signal
     fft_signal_weighted = np.fft.fft(audio_data_weighted)
 
@@ -814,7 +811,7 @@ def func_on_saveWave_exit_click():
     '''
     # Plot the waveform
     plt.figure(figsize=(10, 6))
-    plt.plot(time, audio_data, color='blue')
+    plt.plot(time, data_dictionary['audio_data'], color='blue')
     plt.title('Raw audio time domain')
     plt.xlabel("Time [s]")
     plt.ylabel('PCM encoded audio [sint16]')
@@ -829,7 +826,7 @@ def func_on_saveWave_exit_click():
     
     # Create some data for plotting
     x1 = time
-    y1 = audio_data
+    y1 = data_dictionary['audio_data']
 
     x2 = time
     y2 = audio_data_weighted
@@ -905,13 +902,12 @@ class MyFrame(wx.Frame):
         # Load settings from previous sessions
         global config
 
-        global system_calibration_factor_94db
         global p
         global stream
         global sample_size
         
         print(f"data_dictionary['_device_index'] [default]:  {data_dictionary['_device_index']}")
-        print(f"system_calibration_factor_94db.value[default]:  {system_calibration_factor_94db.value}")
+        print(f"data_dictionary['system_calibration_factor_94db'][default]:  {data_dictionary['system_calibration_factor_94db']}")
         
         
         # To persist Settings -> Initialise a config object.
@@ -921,11 +917,11 @@ class MyFrame(wx.Frame):
         
         # Access values from the config
         data_dictionary['_device_index']                     = config.getint('Settings', "_device_index")
-        system_calibration_factor_94db.value    = config.getfloat('Settings', "system_calibration_factor_94db") 
+        data_dictionary['system_calibration_factor_94db']    = config.getfloat('Settings', "system_calibration_factor_94db") 
 
         # getint is used for integers
         print(f"data_dictionary['_device_index'][loaded from config file]:  {data_dictionary['_device_index']}")
-        print(f"system_calibration_factor_94db.value[loaded from config file]:  {system_calibration_factor_94db.value}")
+        print(f"data_dictionary['system_calibration_factor_94db'][loaded from config file]:  {data_dictionary['system_calibration_factor_94db']}")
 
         # Print the commit hash
         print("Commit version:", get_commit_version())
@@ -1047,12 +1043,12 @@ class MyFrame(wx.Frame):
         """Event handler function for the button click."""
         wx.MessageBox("Check Device List in console and set device number in the text box!!", "Info", wx.OK | wx.ICON_INFORMATION)
         # Call the check device function
-        func_check_devices()
+        func_check_devices(data_dictionary)
 
             
     def on_button_setDevices_click(self, event):  
         # Call function
-        func_on_button_setDevices_click(self)
+        func_on_button_setDevices_click(self, data_dictionary)
 
 
     def on_button_start_click(self, event):
@@ -1062,29 +1058,29 @@ class MyFrame(wx.Frame):
             
     def on_button_stop_click(self, event):       
         # Call function
-        func_on_button_stop_click(self)
+        func_on_button_stop_click(self, data_dictionary)
 
 
     def on_button_runCalib_click(self, event):
         # Call function
-        func_on_button_runCalib_click(self)
+        func_on_button_runCalib_click(self, data_dictionary)
 
 
     def on_button_checkCalib_click(self, event):
         # Call function
-        func_on_button_checkCalib_click(self)
+        func_on_button_checkCalib_click(self, data_dictionary)
         
 
     def on_button_exit_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_button_exit_click(self)
+        func_on_button_exit_click(self, data_dictionary)
         
         
     def on_button_saveWave_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_saveWave_exit_click()
+        func_on_saveWave_exit_click(data_dictionary)
         
     
 
@@ -1161,9 +1157,9 @@ if __name__ == "__main__":
         # Add USB device index
         # Add calibration value
         config.set("Settings","_device_index", f"{data_dictionary['_device_index']}")
-        config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db.value}") 
+        config.set("Settings","system_calibration_factor_94db", f"{data_dictionary['system_calibration_factor_94db']}") 
         print(f"data_dictionary['_device_index'] [saved]:  {data_dictionary['_device_index']}")
-        print(f"system_calibration_factor_94db.value[saved]:  {system_calibration_factor_94db.value}")
+        print(f"data_dictionary['system_calibration_factor_94db'][saved]:  {data_dictionary['system_calibration_factor_94db']}")
     
         # Save the program state (configuration) to a file
         with open('config.ini', 'w') as configfile:
@@ -1183,7 +1179,7 @@ if __name__ == "__main__":
         frames = []
         data_dictionary['is_recording'] = False
         data_dictionary['is_logging'] = False
-        audio_data                                  = np.array([])
+        data_dictionary['audio_data']               = np.array([])
         audio_data_pcm_abs                          = np.array([])
         audio_data_mV                               = np.array([])
         audio_data_mV_calib                         = np.array([])
