@@ -67,7 +67,7 @@ from viztracer import VizTracer # visual thread debugging
 DEBUG == 0 # Default 
 DEBUG == 1 # tracer logs for runtime analysis
 '''
-DEBUG   = 0
+DEBUG   = 1
 
 # visual thead debugging
 if DEBUG == 1:
@@ -131,14 +131,14 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 
 # Device list user input 
-_device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
+#_device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
 
 # flag to track recoding state
-is_recording                        = multiprocessing.Value('b', False)  # 'b' stands for bolean
+#is_recording                        = multiprocessing.Value('b', False)  # 'b' stands for bolean
 # flag to track logging state
-is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
-
-# 'i' stands for integer # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
+#is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
+# 'i' stands for integer 
+# Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
 system_calibration_factor_94db      = multiprocessing.Value('f', 1.0)
 
 # audio data extraceted from chunk in np format.
@@ -202,9 +202,9 @@ def func_check_devices():
 
 def func_on_button_setDevices_click(frame):
     global p
-    global _device_index 
+
     
-    _device_index.value = 0
+    data_dictionary['_device_index'] = 0
     min_range = 0
     max_range = 100
 
@@ -213,8 +213,8 @@ def func_on_button_setDevices_click(frame):
     # Check if the input is within the valid range
     # obtain user text input for device selection
     if min_range <= user_value  <= max_range:
-        _device_index.value = user_value
-        wx.MessageBox(f"Device {_device_index.value}: {p.get_device_info_by_index(_device_index.value)}","Info", wx.OK | wx.ICON_INFORMATION)
+        data_dictionary['_device_index'] = user_value
+        wx.MessageBox(f"Device {data_dictionary['_device_index']}: {p.get_device_info_by_index(data_dictionary['_device_index'])}","Info", wx.OK | wx.ICON_INFORMATION)
     else :
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
@@ -319,9 +319,7 @@ def func_calc_SPL():
 
 def func_process_audio_input(data_dictionary):
     global frames
-    #global is_recording
-    global _device_index
-    
+
     global max_value
     global audio_data 
     global audio_data_pcm_abs
@@ -349,7 +347,7 @@ def func_process_audio_input(data_dictionary):
                     channels=CHANNELS,
                     rate=RATE,
                     input=True,
-                    input_device_index = _device_index.value ,
+                    input_device_index = data_dictionary['_device_index'] ,
                     frames_per_buffer=CHUNK)
     print("Audio stream opened [recording]\n")
     
@@ -472,8 +470,6 @@ def func_run_calibration():
 def func_check_calibration():
     global stream
     global frames
-    global is_recording
-    global _device_index
 
     global max_value
     global audio_data 
@@ -533,19 +529,17 @@ def func_check_calibration():
        
 
 def func_on_button_start_click(frame, datadictionary):
-    global is_recording
-    global is_logging 
-    
+
     # Enable / Disable buttons
     frame.button_start.Disable()
     frame.button_stop.Enable()
     
     # Start recording process
     wx.CallAfter(frame.update_status,  "Start button pressed...\n")
-    print(f"is_recording: {data_dictionary['is_recording']}\n")
+    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
     if not data_dictionary['is_recording']:
         data_dictionary['is_recording'] = True
-        print(f"is_recording: {data_dictionary['is_recording']}\n")
+        print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
         # Create a separate processto run the audio processing task
         # The processes are required to decouple the input stream reading from the GUI app 
         
@@ -576,11 +570,11 @@ def func_on_button_start_click(frame, datadictionary):
         wx.CallAfter(frame.update_status,  "recording process is already running 2.\n")
         print("recording process is already running 2.\n")
 
-    print(f"logging process will be started: {is_logging.value}\n")   
+    print(f"logging process will be started: {data_dictionary['is_logging']}\n")   
     # Start logging thread
-    if not is_logging.value:
-        is_logging.value = True
-        print(f"is_logging.value: {is_logging.value}\n")
+    if not data_dictionary['is_logging']:
+        data_dictionary['is_logging'] = True
+        print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
         # Create a separate thread to run the process
         # The thread is required to decouple the input stream reading from the GUI app 
 
@@ -608,20 +602,19 @@ def func_on_button_start_click(frame, datadictionary):
 
 
 def func_on_button_stop_click(frame):
-    global is_recording
-    global is_logging
+
     
     # Enable / Disable buttons
     frame.button_start.Enable()
     frame.button_stop.Disable()
     
-    print(f"is_recording.value: {is_recording.value}\n")
-    is_recording.value = False
-    print(f"is_recording.value: {is_recording.value}\n")
+    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
+    data_dictionary['is_recording'] = False
+    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
     
-    print(f"is_logging.value: {is_logging.value}\n")
-    is_logging.value = False
-    print(f"is_logging.value: {is_logging.value}\n")
+    print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
+    data_dictionary['is_logging'] = False
+    print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
     
     if frame.recording_process is not None and frame.recording_process.is_alive():
         frame.recording_process.join()  # Wait for the process to finish gracefully
@@ -669,7 +662,6 @@ def func_saveWave_on_noise_event():
     global chunk_noise_list_index
     global chunk_noise_list_spl
     
-    global is_logging
     
     max_spl_in_chunk = 0
     max_spl_index_in_chunk = 0
@@ -689,7 +681,7 @@ def func_saveWave_on_noise_event():
     #Start with offset of wave output length
     time.sleep(WAVE_DT_SEC)
     
-    while is_logging.value:  
+    while data_dictionary['is_logging']:  
         
 
               
@@ -912,13 +904,13 @@ class MyFrame(wx.Frame):
         
         # Load settings from previous sessions
         global config
-        global _device_index
+
         global system_calibration_factor_94db
         global p
         global stream
         global sample_size
         
-        print(f"_device_index.value [default]:  {_device_index.value}")
+        print(f"data_dictionary['_device_index'] [default]:  {data_dictionary['_device_index']}")
         print(f"system_calibration_factor_94db.value[default]:  {system_calibration_factor_94db.value}")
         
         
@@ -928,11 +920,11 @@ class MyFrame(wx.Frame):
         config.read('config.ini')
         
         # Access values from the config
-        _device_index.value                     = config.getint('Settings', "_device_index")
+        data_dictionary['_device_index']                     = config.getint('Settings', "_device_index")
         system_calibration_factor_94db.value    = config.getfloat('Settings', "system_calibration_factor_94db") 
 
         # getint is used for integers
-        print(f"_device_index.value[loaded from config file]:  {_device_index.value}")
+        print(f"data_dictionary['_device_index'][loaded from config file]:  {data_dictionary['_device_index']}")
         print(f"system_calibration_factor_94db.value[loaded from config file]:  {system_calibration_factor_94db.value}")
 
         # Print the commit hash
@@ -945,7 +937,7 @@ class MyFrame(wx.Frame):
                     channels=CHANNELS,
                     rate=RATE,
                     input=True,
-                    input_device_index = _device_index.value ,
+                    input_device_index = data_dictionary['_device_index'] ,
                     frames_per_buffer=CHUNK)
         sample_size.value     =   p.get_sample_size(FORMAT)
         print("Audio stream opened [Init]\n")
@@ -972,7 +964,7 @@ class MyFrame(wx.Frame):
         self.checkCalib_queue   = None
               
         # Create a text box for user input
-        self.text_ctrl   = wx.TextCtrl(panel, value=str(_device_index.value), pos=(290, 40), size=(30, 25))
+        self.text_ctrl   = wx.TextCtrl(panel, value=str(data_dictionary['_device_index']), pos=(290, 40), size=(30, 25))
 
         # Create a button on the panel
         self.button_checkDevices = wx.Button(panel, label="CheckDevices", pos=(200, 10))
@@ -1116,12 +1108,41 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
 
     data_dictionary = manager.dict(
-        _device_index                           = 0,        # Device list user input 
-        is_recording                            = False,
-        is_logging                              = False
-    )
         
-    
+        # Device list user input 
+        _device_index                           = 0,
+        is_recording                            = False,
+        is_logging                              = False,
+        
+        # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
+        system_calibration_factor_94db          = 1.0, 
+        
+        # audio data extraceted from chunk in np format.
+        audio_data                          = np.array([]),
+        a_weighted_signal                   = np.array([]),
+        audio_data_pcm_abs                  = np.array([]),
+        audio_data_mV                       = np.array([]),
+        audio_data_mV_calib                 = np.array([]),
+        audio_data_pressurePa               = np.array([]),
+        audio_data_pressurePa_square        = np.array([]),  
+        
+        audio_data_pressurePa_squareMean    = 0.0,
+        audio_data_pressurePa_rms           = 0.0,
+        audio_data_pressurePa_rms_calib     = 0.0,
+        audio_data_pressurePa_spl           = 0.0,
+        audio_data_max_pcm_value            = 0.0,
+
+        #for output wave file creation / all chunks, complete measurement
+        frames                              = np.array([]),
+
+        chunk_index_i                       = np.array([]),
+        chunk_noise_list_index              = np.array([]),
+        chunk_noise_list_spl                = np.array([]),
+
+        sample_size                         = 2
+    )
+      
+
     app = MyApp()
 
     # Wrap the main event loop in a try-except block
@@ -1139,9 +1160,9 @@ if __name__ == "__main__":
         # Add settings to the config
         # Add USB device index
         # Add calibration value
-        config.set("Settings","_device_index", f"{_device_index.value}")
+        config.set("Settings","_device_index", f"{data_dictionary['_device_index']}")
         config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db.value}") 
-        print(f"_device_index.value [saved]:  {_device_index.value}")
+        print(f"data_dictionary['_device_index'] [saved]:  {data_dictionary['_device_index']}")
         print(f"system_calibration_factor_94db.value[saved]:  {system_calibration_factor_94db.value}")
     
         # Save the program state (configuration) to a file
@@ -1160,8 +1181,8 @@ if __name__ == "__main__":
         chunk_noise_list_index = []
         chunk_noise_list_spl = []
         frames = []
-        is_recording.value = False
-        is_logging.value = False
+        data_dictionary['is_recording'] = False
+        data_dictionary['is_logging'] = False
         audio_data                                  = np.array([])
         audio_data_pcm_abs                          = np.array([])
         audio_data_mV                               = np.array([])
