@@ -250,7 +250,7 @@ def func_calc_SPL(data_dictionary):
         data_dictionary['audio_data_pressurePa_spl'] = 20 * np.log10(data_dictionary['audio_data_pressurePa_rms_calib'] / REFERENCE_PRESSURE)    
     else :
         data_dictionary['audio_data_pressurePa_spl'] = 0     
-        
+    #print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")      
 
 
 def func_process_audio_input(data_dictionary):
@@ -306,7 +306,7 @@ def func_process_audio_input(data_dictionary):
         if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
             data_dictionary['chunk_noise_list_index']   = np.append(data_dictionary['chunk_noise_list_index'], data_dictionary['chunk_index_i'])
             data_dictionary['chunk_noise_list_spl']     = np.append(data_dictionary['chunk_noise_list_spl'], data_dictionary['audio_data_pressurePa_spl'])
-         
+            print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")  
     #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
 
     print("Recording thread stopped.\n")
@@ -575,27 +575,29 @@ def func_saveWave_on_noise_event(data_dictionary):
         # check if events are detected and stored in the list
         if len(data_dictionary['chunk_noise_list_index']) > 0 :
             print("\nNew Recording event: \n")
-    
             #identify max spl value and repsective chunk number 
+            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
+            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
             max_spl_in_chunk = data_dictionary['chunk_noise_list_spl'].max()
-            max_spl_index_in_chunk = data_dictionary['chunk_noise_list_spl'].index(max_spl_in_chunk)
+            max_spl_index_in_chunk = np.where(data_dictionary['chunk_noise_list_spl'] == max_spl_in_chunk)[0][0]
             #index of the chunk with maximum spl 
             max_spl_chunk_index = data_dictionary['chunk_noise_list_index'][max_spl_index_in_chunk]
         
             #extract the relevant noise frames + some delta
-            start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
-            stop_chunk = max_spl_chunk_index+CHUNK_DNUM
-        
+            start_chunk = max(int(max_spl_chunk_index-CHUNK_DNUM), 0)
+            stop_chunk = int(max_spl_chunk_index+CHUNK_DNUM)
+            print(f"start_chunk is : {start_chunk}\n")
+            print(f"stop_chunk is : {stop_chunk}\n")
+            
             # Wait for minimum time CHUNK_DNUM before saveing to add delta to the wave. 
             while data_dictionary['chunk_index_i'] < stop_chunk :
                 pass  # This does nothing, just a placeholder
             
-            noise_frames = data_dictionary['frames'][start_chunk:stop_chunk]
-        
             print(f"Current chunk processed is : {data_dictionary['chunk_index_i']}\n")
             print(f"Events detected : {data_dictionary['chunk_noise_list_index']}\n")
-            print(f"start_chunk is : {start_chunk}\n")
-            print(f"stop_chunk is : {stop_chunk}\n")
+
+            noise_frames = data_dictionary['frames'][start_chunk:stop_chunk]
+        
             
             # Get the current local time
             current_time = datetime.datetime.now()
@@ -1017,8 +1019,8 @@ if __name__ == "__main__":
         #for output wave file creation / all chunks, complete measurement
         frames                              = np.array([]),
 
-        chunk_index_i                       = np.array([]),
-        chunk_noise_list_index              = np.array([]),
+        chunk_index_i                       = np.array([], dtype=int),
+        chunk_noise_list_index              = np.array([], dtype=int),
         chunk_noise_list_spl                = np.array([]),
 
         sample_size                         = 2
