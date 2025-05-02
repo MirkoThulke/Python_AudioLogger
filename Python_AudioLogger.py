@@ -44,9 +44,6 @@ cmd> pip list --outdated
 '''
 import wx # click button GUI
 import pyaudio
-import scipy.signal as signal
-import sympy
-import librosa
 from endolith_weighting_filters import A_weight
 import numpy as np
 import wave
@@ -59,7 +56,6 @@ import os
 import psutil
 import time
 import datetime
-from matplotlib import streamplot
 from viztracer import VizTracer # visual thread debugging
 
 
@@ -123,48 +119,6 @@ OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 
-# Global Variables SHARE MEMORY SECTION #######################################
-# Defined in shared memory to allow several processes to work on the data : multiprocessing."
-# values must be accessed via .value postfix ! 
-# arrays do not require to have a postfix.
-
-
-
-# Device list user input 
-#_device_index                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
-
-# flag to track recoding state
-#is_recording                        = multiprocessing.Value('b', False)  # 'b' stands for bolean
-# flag to track logging state
-#is_logging                          = multiprocessing.Value('b', False)  # 'b' stands for bolean
-# 'i' stands for integer 
-# Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
-#system_calibration_factor_94db      = multiprocessing.Value('f', 1.0)
-
-# audio data extraceted from chunk in np format.
-#audio_data                          = np.array([])
-a_weighted_signal                   = np.array([])
-audio_data_pcm_abs                  = np.array([])
-audio_data_mV                       = np.array([])
-audio_data_mV_calib                 = np.array([])
-audio_data_pressurePa               = np.array([])
-audio_data_pressurePa_square        = np.array([])
-audio_data_pressurePa_squareMean    = multiprocessing.Value('d', 0)  # 'd' stands for double / float
-audio_data_pressurePa_rms           = multiprocessing.Value('d', 0)  # 'd' stands for double / float
-audio_data_pressurePa_rms_calib     = multiprocessing.Value('d', 0)  # 'd' stands for double / float
-audio_data_pressurePa_spl           = multiprocessing.Value('d', 0)  # 'd' stands for double / float
-audio_data_max_pcm_value            = multiprocessing.Value('d', 0)  # 'd' stands for double / float
-
-#for output wave file creation / all chunks, complete measurement
-frames                              = multiprocessing.Array('i', [])  # 'i' stands for integers
-
-chunk_index_i                       = multiprocessing.Value('i', 0)  # 'i' stands for integer
-chunk_noise_list_index              = multiprocessing.Array('i', [])  # 'i' stands for integers
-chunk_noise_list_spl                = multiprocessing.Array('i', [])  # 'i' stands for integers
-
-sample_size                         = multiprocessing.Value('i', 2)  # 'i' stands for integers
-
-
 
 # Global Variables NOT in shared memory #######################################
 
@@ -175,7 +129,6 @@ config                  = None
 p                       = None
 # Open stream to read audio from the microphone
 stream                  = None
-
 
 
 
@@ -197,7 +150,6 @@ def func_check_devices(data_dictionary):
     for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
             print(f"Device {i}: {device_info['name']}")
-
 
 
 def func_on_button_setDevices_click(frame, data_dictionary):
@@ -243,97 +195,67 @@ def apply_a_weighting(data_dictionary):
 
 def func_calc_SPL(data_dictionary):
  
-    # input data
 
-    global a_weighted_signal
-    
-    #output data
-    global audio_data_max_pcm_value
-    global audio_data_pcm_abs
-    global audio_data_mV
-    global audio_data_pressurePa
-    global audio_data_pressurePa_square
-    global audio_data_pressurePa_squareMean
-    global audio_data_pressurePa_rms
-    global audio_data_pressurePa_rms_calib
-    global audio_data_pressurePa_spl
-
-    
-    
     # reset output arrays :
-    a_weighted_signal                           = np.zeros(a_weighted_signal.shape)
-    audio_data_pcm_abs                          = np.zeros(audio_data_pcm_abs.shape)
-    audio_data_mV                               = np.zeros(audio_data_mV.shape)
-    audio_data_pressurePa                       = np.zeros(audio_data_pressurePa.shape)
-    audio_data_pressurePa_square                = np.zeros(audio_data_pressurePa_square.shape)
-    audio_data_pressurePa_squareMean.value      = 0
-    audio_data_pressurePa_rms.value             = 0
-    audio_data_pressurePa_rms_calib.value       = 0
-    audio_data_pressurePa_spl.value             = 0
+    data_dictionary['a_weighted_signal']                        = np.zeros(data_dictionary['a_weighted_signal'].shape)
+    data_dictionary['audio_data_pcm_abs']                       = np.zeros(data_dictionary['audio_data_pcm_abs'].shape)
+    data_dictionary['audio_data_mV']                            = np.zeros(data_dictionary['audio_data_mV'].shape)
+    data_dictionary['audio_data_pressurePa']                    = np.zeros(data_dictionary['audio_data_pressurePa'].shape)
+    data_dictionary['audio_data_pressurePa_square']             = np.zeros(data_dictionary['audio_data_pressurePa_square'].shape)
+    # reset output variables :
+    data_dictionary['audio_data_pressurePa_squareMean']         = 0
+    data_dictionary['audio_data_pressurePa_rms']                = 0
+    data_dictionary['audio_data_pressurePa_rms_calib']          = 0
+    data_dictionary['audio_data_pressurePa_spl']                = 0
 
     
     # Apply A-weighting to the signal
     # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
     # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
-    a_weighted_signal = apply_a_weighting(data_dictionary)
+    data_dictionary['a_weighted_signal'] = apply_a_weighting(data_dictionary)
 
     # Check  the maximum absolute value
-    audio_data_max_pcm_value_new = np.max(np.abs(a_weighted_signal))
+    audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['a_weighted_signal']))
     
     # save if highest of all chunks
-    audio_data_max_pcm_value.value = max(audio_data_max_pcm_value.value, audio_data_max_pcm_value_new)
+    data_dictionary['audio_data_max_pcm_value'] = max(data_dictionary['audio_data_max_pcm_value'], audio_data_max_pcm_value_new)
     # Example: Process the audio (e.g., calculate RMS for volume level) 
         
     # Absolute values first      
-    audio_data_pcm_abs = np.abs(a_weighted_signal)
+    data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['a_weighted_signal'])
     
     # Convert to mV using the Sensitivy value of the microphone/ Assuming that the microphone uses the full int16 signale range . 
     # Applying a preamp gain factor (only for better understanding)
-    audio_data_mV = audio_data_pcm_abs / PRE_AMP_GAIN_LIN
-    #print(f"audio_data_mV: {audio_data_mV}")
+    data_dictionary['audio_data_mV'] = data_dictionary['audio_data_pcm_abs'] / PRE_AMP_GAIN_LIN
+    #print(f"data_dictionary['audio_data_mV']: {data_dictionary['audio_data_mV']}")
     
     
     # Converting mV to Pa using the Sensitivy value
-    audio_data_pressurePa = audio_data_mV / MIC_SENSITIVITY
-    #print(f"audio_data_pressurePa: {audio_data_pressurePa}")
+    data_dictionary['audio_data_pressurePa'] = data_dictionary['audio_data_mV'] / MIC_SENSITIVITY
+    #print(f"data_dictionary['audio_data_pressurePa']: {data_dictionary['audio_data_pressurePa']}")
     
     # Convert to RMS - Root mean square
-    audio_data_pressurePa_square = audio_data_pressurePa ** 2    
-    audio_data_pressurePa_squareMean.value = np.mean(audio_data_pressurePa_square)         
-    if audio_data_pressurePa_squareMean.value  > 0 :
-        audio_data_pressurePa_rms.value = np.sqrt(audio_data_pressurePa_squareMean.value)
+    data_dictionary['audio_data_pressurePa_square'] = data_dictionary['audio_data_pressurePa'] ** 2    
+    data_dictionary['audio_data_pressurePa_squareMean'] = np.mean(data_dictionary['audio_data_pressurePa_square'])         
+    if data_dictionary['audio_data_pressurePa_squareMean']  > 0 :
+        data_dictionary['audio_data_pressurePa_rms'] = np.sqrt(data_dictionary['audio_data_pressurePa_squareMean'])
     else :
-        audio_data_pressurePa_rms.value = 0           
+        data_dictionary['audio_data_pressurePa_rms'] = 0           
    
-    audio_data_pressurePa_rms_calib.value =audio_data_pressurePa_rms.value * data_dictionary['system_calibration_factor_94db']
+    data_dictionary['audio_data_pressurePa_rms_calib'] =data_dictionary['audio_data_pressurePa_rms'] * data_dictionary['system_calibration_factor_94db']
     
     # convert RMS to SPL (explained below)
     # Reference pressure in air = 20 µPa
-    if audio_data_pressurePa_rms_calib.value > 0:
-        audio_data_pressurePa_spl.value = 20 * np.log10(audio_data_pressurePa_rms_calib.value / REFERENCE_PRESSURE)    
+    if data_dictionary['audio_data_pressurePa_rms_calib'] > 0:
+        data_dictionary['audio_data_pressurePa_spl'] = 20 * np.log10(data_dictionary['audio_data_pressurePa_rms_calib'] / REFERENCE_PRESSURE)    
     else :
-        audio_data_pressurePa_spl.value = 0     
+        data_dictionary['audio_data_pressurePa_spl'] = 0     
         
 
 
 def func_process_audio_input(data_dictionary):
-    global frames
 
-    global max_value
-
-    global audio_data_pcm_abs
-    global audio_data_mV
-    global audio_data_pressurePa
-    global audio_data_pressurePa_square
-    global audio_data_pressurePa_squareMean
-    global audio_data_pressurePa_rms
-    global audio_data_pressurePa_rms_calib
-    global audio_data_pressurePa_spl
-    
-    global chunk_index_i
-    global chunk_noise_list_index
-    global chunk_noise_list_spl
-    
+ 
     #whole process will run in high priority mode
     p_func_process_audio_input = psutil.Process(os.getpid())
     p_func_process_audio_input.nice(psutil.REALTIME_PRIORITY_CLASS)  
@@ -355,10 +277,10 @@ def func_process_audio_input(data_dictionary):
     # Because theading has been replaced by processes
     
     #reset audio input related lists and counters
-    chunk_index_i.value = 0    # counter of processed chunks
-    chunk_noise_list_index = []
-    chunk_noise_list_spl = []
-    frames = []
+    data_dictionary['chunk_index_i']            = 0    # counter of processed chunks
+    data_dictionary['chunk_noise_list_index']   = np.array([])
+    data_dictionary['chunk_noise_list_spl']     = np.array([])
+    data_dictionary['frames']                   = np.array([])
     
     print(f"is_recording: {data_dictionary['is_recording']}\n")
     while data_dictionary['is_recording']==True :
@@ -366,52 +288,41 @@ def func_process_audio_input(data_dictionary):
         data = stream_loc.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        frames.append(data)
+        data_dictionary['frames']       =  np.append(data_dictionary['frames'], data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
         
         #chunk counter
-        chunk_index_i.value = chunk_index_i.value+1
-        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {chunk_index_i.value}\n")
-        print(f"chunk_index : {chunk_index_i.value}\n")
+        data_dictionary['chunk_index_i'] = data_dictionary['chunk_index_i']+1
+        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
+        print(f"chunk_index : {data_dictionary['chunk_index_i']}\n")
         
-        #frame.update_dba_display.AppendText(f"  {round(audio_data_pressurePa_spl.value, 2)} [dbA]\n")
+        #frame.update_dba_display.AppendText(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")
         
-        if audio_data_pressurePa_spl.value > SPL_MAX_DAY_DBA :
-            chunk_noise_list_index.append(chunk_index_i.value)
-            chunk_noise_list_spl.append(audio_data_pressurePa_spl.value)
+        if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
+            data_dictionary['chunk_noise_list_index']   = np.append(data_dictionary['chunk_noise_list_index'], data_dictionary['chunk_index_i'])
+            data_dictionary['chunk_noise_list_spl']     = np.append(data_dictionary['chunk_noise_list_spl'], data_dictionary['audio_data_pressurePa_spl'])
          
-    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {chunk_index_i.value}\n")
+    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
 
     print("Recording thread stopped.\n")
     #frame.update_status.AppendText("Recording stopped ...\n")
-    print(f"chunk_noise_list_index : {chunk_noise_list_index}\n")
+    print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
 
     p_loc.terminate()
     
 def func_run_calibration(data_dictionary):
     global stream
-    global frames
-    
-    global audio_data_max_pcm_value
 
-    global audio_data_pcm_abs
-    global audio_data_mV
-    global audio_data_pressurePa
-    global audio_data_pressurePa_square
-    global audio_data_pressurePa_squareMean
-    global audio_data_pressurePa_rms
-    global audio_data_pressurePa_rms_calib
-    global audio_data_pressurePa_spl
+  
 
-
-    calib_arr = []
+    calib_arr = np.array([])
     i= 0 
-    audio_data_max_pcm_value.value  = 0
+    data_dictionary['audio_data_max_pcm_value']  = 0
     
     
     while i<CALIB_ITERATION_LENGTH :
@@ -422,23 +333,23 @@ def func_run_calibration(data_dictionary):
         data = stream.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        frames.append(data)
+        data_dictionary['frames']       = np.append(data_dictionary['frames'], data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
         
         
-        if audio_data_pressurePa_rms.value > 0 : 
+        if data_dictionary['audio_data_pressurePa_rms'] > 0 : 
             
             # 94 dB != 20 log (rms /p_0) :
-            system_calibration_factor_94db_new = (REFERENCE_PRESSURE * (np.power(10, 94/20))) /audio_data_pressurePa_rms.value
+            system_calibration_factor_94db_new = (REFERENCE_PRESSURE * (np.power(10, 94/20))) /data_dictionary['audio_data_pressurePa_rms']
             print(f"system_calibration_factor_94db_new: {system_calibration_factor_94db_new}\n") 
             
             # Store new value in array 
-            calib_arr.append(system_calibration_factor_94db_new)
+            calib_arr   =   np.append(calib_arr, system_calibration_factor_94db_new)
             
         else :
             print("SPL or Pa equal to zero in this chunk. Check sound input ! \n") 
@@ -446,13 +357,13 @@ def func_run_calibration(data_dictionary):
          
     # Check if the input PCM coded signal at 94dB calibration db (which is quite loud) is using the full range of the sint16 signal range
     # Check maximum across all chunks, see while loop
-    print(f"Maximum PCM  amplitude: {audio_data_max_pcm_value.value}\n")
-    if audio_data_max_pcm_value.value > int(MAX_INT16*0.95) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
-    elif audio_data_max_pcm_value.value < int(MAX_INT16*0.8) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
+    print(f"Maximum PCM  amplitude: {data_dictionary['audio_data_max_pcm_value']}\n")
+    if data_dictionary['audio_data_max_pcm_value'] > int(MAX_INT16*0.95) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
+    elif data_dictionary['audio_data_max_pcm_value'] < int(MAX_INT16*0.8) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
     else :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {audio_data_max_pcm_value.value}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
     
     # calculate average calibration factor across all chunks, see while loop
     calib_average = sum(calib_arr) / len(calib_arr)
@@ -466,54 +377,38 @@ def func_run_calibration(data_dictionary):
 
 def func_check_calibration(data_dictionary):
     global stream
-    global frames
 
-    global max_value
 
-    global audio_data_pcm_abs
-    global audio_data_mV
-    global audio_data_pressurePa
-    global audio_data_pressurePa_square
-    global audio_data_pressurePa_squareMean
-    global audio_data_pressurePa_rms
-    global audio_data_pressurePa_rms_calib
-    global audio_data_pressurePa_spl
-
-     
-    
-    
-    spl_error_arr = []
-    spl_error_arr_square = []
-    
-    i= 0 
+    spl_error_arr           = np.array([])
+    spl_error_arr_square    = np.array([])
+    i = 0
    
     while i<CALIB_ITERATION_LENGTH :       
-        i=i+1
-    
+        i = i+1
         # Read a chunk of audio data
         data = stream.read(CHUNK)
       
         # Convert the audio data to a numpy array
-        data_dictionary['audio_data'] = np.frombuffer(data, dtype=np.int16)
+        data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        frames.append(data)
+        data_dictionary['frames']       = np.append(data_dictionary['frames'], data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
         
         
-        if audio_data_pressurePa_spl.value > 0 : 
+        if data_dictionary['audio_data_pressurePa_spl'] > 0 : 
             
             # calculate error in dB SPL
-            spl_error = 94 - audio_data_pressurePa_spl.value
+            spl_error = 94 - data_dictionary['audio_data_pressurePa_spl']
             print(f"spl_error: {spl_error}\n")
             
             spl_error_square = np.power(spl_error, 2)
                                                 
             # Store new value in array 
-            spl_error_arr_square.append(spl_error_square)
-            spl_error_arr.append(spl_error)
+            spl_error_arr_square =  np.append(spl_error_arr_square, spl_error_square)
+            spl_error_arr        =  np.append(spl_error_arr, spl_error)
             
         else :
             print("SPL or Pa equal to zero in this chunk. Check sound input !\n ") 
@@ -653,20 +548,15 @@ def func_on_button_exit_click(frame, data_dictionary):
 
 
 def func_saveWave_on_noise_event(data_dictionary):
-    global frames
+
+
+    max_spl_in_chunk            = 0
+    max_spl_index_in_chunk      = 0
+    max_spl_chunk_index         = 0
+    start_chunk                 = 0
+    stop_chunk                  = 0
     
-    global chunk_index_i
-    global chunk_noise_list_index
-    global chunk_noise_list_spl
-    
-    
-    max_spl_in_chunk = 0
-    max_spl_index_in_chunk = 0
-    max_spl_chunk_index = 0
-    start_chunk = 0
-    stop_chunk = 0
-    
-    noise_frames = []
+    noise_frames                = np.array([])
   
     #whole process will run in high priority mode, but lower than the Audio processing task
     p_func_saveWave_on_noise_event = psutil.Process(os.getpid())
@@ -683,29 +573,27 @@ def func_saveWave_on_noise_event(data_dictionary):
 
               
         # check if events are detected and stored in the list
-        if len(chunk_noise_list_index) > 0 :
-            print()
-            print("New Recording event: \n")
-
-        
-            #identify max spl value and repsective hunk number 
-            max_spl_in_chunk = max(chunk_noise_list_spl)
-            max_spl_index_in_chunk = chunk_noise_list_spl.index(max_spl_in_chunk)
+        if len(data_dictionary['chunk_noise_list_index']) > 0 :
+            print("\nNew Recording event: \n")
+    
+            #identify max spl value and repsective chunk number 
+            max_spl_in_chunk = data_dictionary['chunk_noise_list_spl'].max()
+            max_spl_index_in_chunk = data_dictionary['chunk_noise_list_spl'].index(max_spl_in_chunk)
             #index of the chunk with maximum spl 
-            max_spl_chunk_index = chunk_noise_list_index[max_spl_index_in_chunk]
+            max_spl_chunk_index = data_dictionary['chunk_noise_list_index'][max_spl_index_in_chunk]
         
             #extract the relevant noise frames + some delta
             start_chunk = max(max_spl_chunk_index-CHUNK_DNUM, 0)
             stop_chunk = max_spl_chunk_index+CHUNK_DNUM
         
             # Wait for minimum time CHUNK_DNUM before saveing to add delta to the wave. 
-            while chunk_index_i.value < stop_chunk :
-                i = stop_chunk-chunk_index_i.value
+            while data_dictionary['chunk_index_i'] < stop_chunk :
+                pass  # This does nothing, just a placeholder
             
-            noise_frames = frames[start_chunk:stop_chunk]
+            noise_frames = data_dictionary['frames'][start_chunk:stop_chunk]
         
-            print(f"Current chunk processed is : {chunk_index_i.value}\n")
-            print(f"Events detected : {chunk_noise_list_index}\n")
+            print(f"Current chunk processed is : {data_dictionary['chunk_index_i']}\n")
+            print(f"Events detected : {data_dictionary['chunk_noise_list_index']}\n")
             print(f"start_chunk is : {start_chunk}\n")
             print(f"stop_chunk is : {stop_chunk}\n")
             
@@ -731,40 +619,38 @@ def func_saveWave_on_noise_event(data_dictionary):
 
             with wave.open(full_path, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
-                wf.setsampwidth(sample_size.value)
+                wf.setsampwidth(data_dictionary['sample_size'])
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
                 print(f"Audio saved as {noise_file_name}\n")
 
 
             #erase noise event arrays
-            chunk_noise_list_index = []
-            chunk_noise_list_spl = []
+            data_dictionary['chunk_noise_list_index']   = np.array([])
+            data_dictionary['chunk_noise_list_spl']     = np.array([])
             
             max_spl_in_chunk = 0
             max_spl_index_in_chunk = 0
             max_spl_chunk_index = 0
             start_chunk = 0
             stop_chunk = 0
-            noise_frames = []
+            noise_frames                                = np.array([])
         
             #remove chunks from wave output which are already treated. To free local resources.
-            frames = frames[start_chunk:]
+            data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
             #frame.update_status.AppendText(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")
             print()
 
 
 
 def func_on_saveWave_exit_click(data_dictionary):
-    global frames
-    
-    
+
     # Write the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'wb') as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(sample_size.value)
+        wf.setsampwidth(data_dictionary['sample_size'])
         wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
+        wf.writeframes(b''.join(data_dictionary['frames']))
         print(f"Audio saved as {OUTPUT_FILENAME}")
 
     # open the recorded data to a WAV file
@@ -904,7 +790,7 @@ class MyFrame(wx.Frame):
 
         global p
         global stream
-        global sample_size
+
         
         print(f"data_dictionary['_device_index'] [default]:  {data_dictionary['_device_index']}")
         print(f"data_dictionary['system_calibration_factor_94db'][default]:  {data_dictionary['system_calibration_factor_94db']}")
@@ -935,7 +821,7 @@ class MyFrame(wx.Frame):
                     input=True,
                     input_device_index = data_dictionary['_device_index'] ,
                     frames_per_buffer=CHUNK)
-        sample_size.value     =   p.get_sample_size(FORMAT)
+        data_dictionary['sample_size']     =   p.get_sample_size(FORMAT)
         print("Audio stream opened [Init]\n")
         
         
@@ -1173,23 +1059,23 @@ if __name__ == "__main__":
     
         # Close audio interface
         p.terminate()
-        chunk_index_i.value = 0    # counter of processed chunks
-        chunk_noise_list_index = []
-        chunk_noise_list_spl = []
-        frames = []
-        data_dictionary['is_recording'] = False
-        data_dictionary['is_logging'] = False
-        data_dictionary['audio_data']               = np.array([])
-        audio_data_pcm_abs                          = np.array([])
-        audio_data_mV                               = np.array([])
-        audio_data_mV_calib                         = np.array([])
-        audio_data_pressurePa                       = np.array([])
-        audio_data_pressurePa_square                = np.array([])
-        audio_data_pressurePa_squareMean.value      = 0
-        audio_data_pressurePa_rms.value             = 0
-        audio_data_pressurePa_rms_calib.value       = 0
-        audio_data_pressurePa_spl.value             = 0
-        audio_data_max_pcm_value.value              = 0
+        data_dictionary['chunk_index_i']                        = 0    # counter of processed chunks
+        data_dictionary['chunk_noise_list_index']               = np.array([])
+        data_dictionary['chunk_noise_list_spl']                 = np.array([])
+        data_dictionary['frames']                               = np.array([])
+        data_dictionary['is_recording']                         = False
+        data_dictionary['is_logging']                           = False
+        data_dictionary['audio_data']                           = np.array([])
+        data_dictionary['audio_data_pcm_abs']                   = np.array([])
+        data_dictionary['audio_data_mV']                        = np.array([])
+        data_dictionary['audio_data_mV_calib']                  = np.array([])
+        data_dictionary['audio_data_pressurePa']                = np.array([])
+        data_dictionary['audio_data_pressurePa_square']         = np.array([])
+        data_dictionary['audio_data_pressurePa_squareMean']     = 0
+        data_dictionary['audio_data_pressurePa_rms']            = 0
+        data_dictionary['audio_data_pressurePa_rms_calib']      = 0
+        data_dictionary['audio_data_pressurePa_spl']            = 0
+        data_dictionary['audio_data_max_pcm_value']             = 0
         
         # Terminate running process, in case they are not closed already.
         #if recording_process.is_alive() :
