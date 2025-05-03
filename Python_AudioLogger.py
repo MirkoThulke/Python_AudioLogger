@@ -273,8 +273,6 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     
     print("recording_process started 1/2\n")
     
-    # frame.update_status.AppendText  -> updateAfter is replaced by AppendText because we use a queue as argument.
-    # Because theading has been replaced by processes
     
     #reset audio input related lists and counters
     data_dictionary['chunk_index_i']            = 0    # counter of processed chunks
@@ -298,21 +296,24 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
         
         #chunk counter
         data_dictionary['chunk_index_i'] = data_dictionary['chunk_index_i']+1
-        #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
+
+        recording_status_queue.put(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")  # Send message to main process
         print(f"chunk_index : {data_dictionary['chunk_index_i']}\n")
         
+        # Print dbA on GUI
         recording_dba_queue.put(f"{round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")  # Send message to main process
-        #frame.update_dba_display.AppendText(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")
+
         
         if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
             data_dictionary['chunk_noise_list_index']   = np.append(data_dictionary['chunk_noise_list_index'], data_dictionary['chunk_index_i'])
             data_dictionary['chunk_noise_list_spl']     = np.append(data_dictionary['chunk_noise_list_spl'], data_dictionary['audio_data_pressurePa_spl'])
-            #print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")  
-    #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
+            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")            
+            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
+            
 
     print("Recording thread stopped.\n")
-    #frame.update_status.AppendText("Recording stopped ...\n")
-    print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
+    recording_status_queue.put("Recording stopped ...\n")  # Send message to main process
+
 
     p_loc.terminate()
     
@@ -440,8 +441,7 @@ def func_on_button_start_click(frame, data_dictionary):
         if frame.recording_process is None or not frame.recording_process.is_alive():
             try:
                 print("Creating and starting recording process...\n")
-                frame.recording_status_queue    = multiprocessing.Queue()
-                frame.recording_dba_queue       = multiprocessing.Queue()
+
                 frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary,frame.recording_status_queue,frame.recording_dba_queue,))
                 print("recording process created\n")
             
@@ -478,8 +478,7 @@ def func_on_button_start_click(frame, data_dictionary):
             # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
            
-            frame.logging_queue  = multiprocessing.Queue()
-            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary,))
+            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary,frame.logging_status_queue,))
             print("logging process created\n")
  
             frame.logging_process.start()
@@ -549,7 +548,7 @@ def func_on_button_exit_click(frame, data_dictionary):
 
 
 
-def func_saveWave_on_noise_event(data_dictionary):
+def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
 
 
     max_spl_in_chunk            = 0
@@ -572,31 +571,33 @@ def func_saveWave_on_noise_event(data_dictionary):
     
     while data_dictionary['is_logging']:  
         
-
-              
+             
         # check if events are detected and stored in the list
         if data_dictionary['chunk_noise_list_index'] is not None and data_dictionary['chunk_noise_list_index'].size > 0 :
             print("\nNew Recording event: \n")
+            
             #identify max spl value and repsective chunk number 
-            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
-            max_spl_in_chunk = data_dictionary['chunk_noise_list_spl'].max()
+            max_spl_in_chunk = np.max(data_dictionary['chunk_noise_list_spl'])
             max_spl_index_in_chunk = np.where(data_dictionary['chunk_noise_list_spl'] == max_spl_in_chunk)[0][0]
+ 
             #index of the chunk with maximum spl 
             max_spl_chunk_index = data_dictionary['chunk_noise_list_index'][max_spl_index_in_chunk]
         
             #extract the relevant noise frames + some delta
             start_chunk = max(int(max_spl_chunk_index-CHUNK_DNUM), 0)
             stop_chunk = int(max_spl_chunk_index+CHUNK_DNUM)
-            print(f"start_chunk is : {start_chunk}\n")
-            print(f"stop_chunk is : {stop_chunk}\n")
+
             
             # Wait for minimum time CHUNK_DNUM before saveing to add delta to the wave. 
             while data_dictionary['chunk_index_i'] < stop_chunk :
                 pass  # This does nothing, just a placeholder
             
-            print(f"Current chunk processed is : {data_dictionary['chunk_index_i']}\n")
-            print(f"Events detected : {data_dictionary['chunk_noise_list_index']}\n")
-
+            print("Noise events will be written: \n")
+            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
+            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
+            print(f"start_chunk is : {start_chunk}\n")
+            print(f"stop_chunk is : {stop_chunk}\n")
+            
             noise_frames = data_dictionary['frames'][start_chunk:stop_chunk]
         
             
@@ -641,8 +642,9 @@ def func_saveWave_on_noise_event(data_dictionary):
         
             #remove chunks from wave output which are already treated. To free local resources.
             data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
-            #frame.update_status.AppendText(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")
-            print()
+            
+            recording_status_queue.put(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")  # Send message to main process
+
 
 
 
@@ -837,10 +839,8 @@ class MyFrame(wx.Frame):
         self.recording_dba_queue        = multiprocessing.Queue()
         # Timer to  trigger queue reading
         self.timer                      = wx.Timer(self)  
-
-
         self.logging_process            = None  
-        self.logging_queue              = multiprocessing.Queue()
+        self.logging_status_queue       = multiprocessing.Queue()
 
 
         self.runCalib_thread            = None
@@ -876,7 +876,7 @@ class MyFrame(wx.Frame):
         self.status_text = wx.StaticText(panel, label="Status:", pos=(10, 180), size=(300, 50))
         
         # Create text output field
-        self.dba_display = wx.StaticText(panel, label="dbA:", pos=(10, 210), size=(33, 50))
+        self.dba_display = wx.StaticText(panel, label="dbA:", pos=(10, 240), size=(33, 50))
         # Set a larger font
         font_large = wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
         self.dba_display.SetFont(font_large)
@@ -888,6 +888,7 @@ class MyFrame(wx.Frame):
         
         ##################################################################
         self.Bind(wx.EVT_TIMER, self.update_dba_display, self.timer)
+        self.Bind(wx.EVT_TIMER, self.update_status, self.timer)
         # Check every 10ms
         self.timer.Start(10)
         
@@ -921,10 +922,16 @@ class MyFrame(wx.Frame):
         self.Show()
 
 
-    def update_status(self, text):
+    def update_status(self, event):
         # Safely append text to the TextCtrl
-        self.status_text.SetLabel(text)
-
+        while not self.recording_status_queue.empty():
+            msg = self.recording_status_queue.get()
+            wx.CallAfter(self.status_text.SetLabel, msg)
+        # Safely append text to the TextCtrl
+        while not self.logging_status_queue.empty():
+            msg = self.logging_status_queue.get()
+            wx.CallAfter(self.status_text.SetLabel, msg)
+        
     def update_dba_display(self, event):
         # Safely append text to the TextCtrl
         while not self.recording_dba_queue.empty():
