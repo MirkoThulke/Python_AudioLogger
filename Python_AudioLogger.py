@@ -837,16 +837,19 @@ class MyFrame(wx.Frame):
         self.recording_process          = None
         self.recording_status_queue     = multiprocessing.Queue()
         self.recording_dba_queue        = multiprocessing.Queue()
-        # Timer to  trigger queue reading
-        self.timer                      = wx.Timer(self)  
+
         self.logging_process            = None  
-        self.logging_status_queue       = multiprocessing.Queue()
+        self.logging_status_queue       = multiprocessing.Queue() 
+        
+        # Timer to  trigger queue reading
+        self.timerDba                   = wx.Timer(self)  
+        self.timerStatus                = wx.Timer(self)  
+
 
 
         self.runCalib_thread            = None
         self.checkCalib_thread          = None
-
-              
+            
         # Create a text box for user input
         self.text_ctrl   = wx.TextCtrl(panel, value=str(data_dictionary['_device_index']), pos=(290, 40), size=(30, 25))
 
@@ -887,11 +890,11 @@ class MyFrame(wx.Frame):
 
         
         ##################################################################
-        self.Bind(wx.EVT_TIMER, self.update_dba_display, self.timer)
-        self.Bind(wx.EVT_TIMER, self.update_status, self.timer)
+        self.Bind(wx.EVT_TIMER, self.update_dba_display, self.timerDba)
+        self.Bind(wx.EVT_TIMER, self.update_status, self.timerStatus)
         # Check every 10ms
-        self.timer.Start(10)
-        
+        self.timerDba.Start(10)
+        self.timerStatus.Start(10)
         
         # Bind the button click event to an event handler function
         self.button_checkDevices.Bind(wx.EVT_BUTTON, self.on_button_checkDevices_click)
