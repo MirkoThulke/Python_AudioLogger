@@ -78,7 +78,7 @@ if DEBUG == 1:
 
 
 # Behringer UMC control panel settings :
-# ASIO buffer size 512   
+# ASIO buffer size 1024   
 # Sampling rate 48kHz
 # Format : 4 Channel 16 bits  
 
@@ -641,7 +641,7 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
             noise_frames                                = np.array([])
         
             #remove chunks from wave output which are already treated. To free local resources.
-            data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
+            #data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
             
             recording_status_queue.put(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")  # Send message to main process
 
@@ -763,7 +763,7 @@ def func_on_saveWave_exit_click(data_dictionary):
     # Second plot (top-right)
     axs[0, 1].plot(x3, y3)
     axs[0, 1].set_title('Raw audio frequency domain')
-    axs[0, 1].set_xlabel("Freq. [kHz]")
+    axs[0, 1].set_xlabel("Freq. [Hz]")
     axs[0, 1].set_ylabel('PCM encoded audio [sint16]')
     axs[0, 1].set_xlim(xmin_f, xmax_f)
     axs[0, 1].set_ylim(ymin_f, ymax_f)
@@ -771,7 +771,7 @@ def func_on_saveWave_exit_click(data_dictionary):
     # Fourth plot (bottom-right) with a different x-axis range
     axs[1, 1].plot(x4, y4)
     axs[1, 1].set_title('A-weighted audio frequency domain')
-    axs[1, 1].set_xlabel("Freq. [kHz]")
+    axs[1, 1].set_xlabel("Freq. [Hz]")
     axs[1, 1].set_ylabel('PCM encoded audio [sint16]')
     axs[1, 1].set_xlim(xmin_f, xmax_f)
     axs[1, 1].set_ylim(ymin_f, ymax_f)
