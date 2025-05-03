@@ -301,7 +301,7 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
         #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
         print(f"chunk_index : {data_dictionary['chunk_index_i']}\n")
         
-        recording_dba_queue.put(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")  # Send message to main process
+        recording_dba_queue.put(f"{round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")  # Send message to main process
         #frame.update_dba_display.AppendText(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")
         
         if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
@@ -833,20 +833,19 @@ class MyFrame(wx.Frame):
    
         # To store reference to the thread or process (optional choice)
         self.recording_process          = None
-        self.recording_status_queue     = None
-        self.recording_dba_queue        = None
-        
-        
-        self.logging_process    = None  
-        self.logging_queue      = None
-        
-        
-        self.runCalib_thread    = None
-        self.runCalib_queue     = None
+        self.recording_status_queue     = multiprocessing.Queue()
+        self.recording_dba_queue        = multiprocessing.Queue()
+        # Timer to  trigger queue reading
+        self.timer                      = wx.Timer(self)  
 
-   
-        self.checkCalib_thread  = None
-        self.checkCalib_queue   = None
+
+        self.logging_process            = None  
+        self.logging_queue              = multiprocessing.Queue()
+
+
+        self.runCalib_thread            = None
+        self.checkCalib_thread          = None
+
               
         # Create a text box for user input
         self.text_ctrl   = wx.TextCtrl(panel, value=str(data_dictionary['_device_index']), pos=(290, 40), size=(30, 25))
@@ -888,6 +887,9 @@ class MyFrame(wx.Frame):
 
         
         ##################################################################
+        self.Bind(wx.EVT_TIMER, self.update_dba_display, self.timer)
+        # Check every 10ms
+        self.timer.Start(10)
         
         
         # Bind the button click event to an event handler function
@@ -923,7 +925,7 @@ class MyFrame(wx.Frame):
         # Safely append text to the TextCtrl
         self.status_text.SetLabel(text)
 
-    def update_dba_display(self, text):
+    def update_dba_display(self, event):
         # Safely append text to the TextCtrl
         while not self.recording_dba_queue.empty():
             msg = self.recording_dba_queue.get()
