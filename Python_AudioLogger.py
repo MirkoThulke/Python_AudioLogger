@@ -253,7 +253,7 @@ def func_calc_SPL(data_dictionary):
     #print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")      
 
 
-def func_process_audio_input(data_dictionary):
+def func_process_audio_input(data_dictionary, recording_status_queue, recording_dba_queue):
 
  
     #whole process will run in high priority mode
@@ -278,7 +278,7 @@ def func_process_audio_input(data_dictionary):
     
     #reset audio input related lists and counters
     data_dictionary['chunk_index_i']            = 0    # counter of processed chunks
-    data_dictionary['chunk_noise_list_index']   = np.array([])
+    data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
     data_dictionary['chunk_noise_list_spl']     = np.array([])
     data_dictionary['frames']                   = np.array([])
     
@@ -301,12 +301,13 @@ def func_process_audio_input(data_dictionary):
         #frame.update_status.AppendText(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
         print(f"chunk_index : {data_dictionary['chunk_index_i']}\n")
         
+        recording_dba_queue.put(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")  # Send message to main process
         #frame.update_dba_display.AppendText(f"  {round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")
         
         if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
             data_dictionary['chunk_noise_list_index']   = np.append(data_dictionary['chunk_noise_list_index'], data_dictionary['chunk_index_i'])
             data_dictionary['chunk_noise_list_spl']     = np.append(data_dictionary['chunk_noise_list_spl'], data_dictionary['audio_data_pressurePa_spl'])
-            print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")  
+            #print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")  
     #frame.update_status.AppendText(f"Recording terminated. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")
 
     print("Recording thread stopped.\n")
@@ -439,8 +440,9 @@ def func_on_button_start_click(frame, data_dictionary):
         if frame.recording_process is None or not frame.recording_process.is_alive():
             try:
                 print("Creating and starting recording process...\n")
-                frame.recording_queue  = multiprocessing.Queue()
-                frame.recording_process =multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary,))
+                frame.recording_status_queue    = multiprocessing.Queue()
+                frame.recording_dba_queue       = multiprocessing.Queue()
+                frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary,frame.recording_status_queue,frame.recording_dba_queue,))
                 print("recording process created\n")
             
                 # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
@@ -573,10 +575,9 @@ def func_saveWave_on_noise_event(data_dictionary):
 
               
         # check if events are detected and stored in the list
-        if len(data_dictionary['chunk_noise_list_index']) > 0 :
+        if data_dictionary['chunk_noise_list_index'] is not None and data_dictionary['chunk_noise_list_index'].size > 0 :
             print("\nNew Recording event: \n")
             #identify max spl value and repsective chunk number 
-            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
             print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
             max_spl_in_chunk = data_dictionary['chunk_noise_list_spl'].max()
             max_spl_index_in_chunk = np.where(data_dictionary['chunk_noise_list_spl'] == max_spl_in_chunk)[0][0]
@@ -628,7 +629,7 @@ def func_saveWave_on_noise_event(data_dictionary):
 
 
             #erase noise event arrays
-            data_dictionary['chunk_noise_list_index']   = np.array([])
+            data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
             data_dictionary['chunk_noise_list_spl']     = np.array([])
             
             max_spl_in_chunk = 0
@@ -831,20 +832,20 @@ class MyFrame(wx.Frame):
         panel = wx.Panel(self)
    
         # To store reference to the thread or process (optional choice)
-        self.recording_thread   = None
-        self.recording_process  = None
-        self.recording_queue    = None
+        self.recording_process          = None
+        self.recording_status_queue     = None
+        self.recording_dba_queue        = None
         
-        self.logging_thread     = None
+        
         self.logging_process    = None  
         self.logging_queue      = None
         
+        
         self.runCalib_thread    = None
-        self.runCalib_process   = None
         self.runCalib_queue     = None
-                
+
+   
         self.checkCalib_thread  = None
-        self.checkCalib_process = None
         self.checkCalib_queue   = None
               
         # Create a text box for user input
@@ -924,7 +925,9 @@ class MyFrame(wx.Frame):
 
     def update_dba_display(self, text):
         # Safely append text to the TextCtrl
-        self.dba_display.SetLabel(text)
+        while not self.recording_dba_queue.empty():
+            msg = self.recording_dba_queue.get()
+            wx.CallAfter(self.dba_display.SetLabel, msg)
 
 
     def on_button_checkDevices_click(self, event):
@@ -1019,7 +1022,7 @@ if __name__ == "__main__":
         #for output wave file creation / all chunks, complete measurement
         frames                              = np.array([]),
 
-        chunk_index_i                       = np.array([], dtype=int),
+        chunk_index_i                       = 0,
         chunk_noise_list_index              = np.array([], dtype=int),
         chunk_noise_list_spl                = np.array([]),
 
@@ -1062,7 +1065,7 @@ if __name__ == "__main__":
         # Close audio interface
         p.terminate()
         data_dictionary['chunk_index_i']                        = 0    # counter of processed chunks
-        data_dictionary['chunk_noise_list_index']               = np.array([])
+        data_dictionary['chunk_noise_list_index']               = np.array([], dtype=int),
         data_dictionary['chunk_noise_list_spl']                 = np.array([])
         data_dictionary['frames']                               = np.array([])
         data_dictionary['is_recording']                         = False
