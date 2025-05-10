@@ -278,7 +278,7 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     data_dictionary['chunk_index_i']            = 0    # counter of processed chunks
     data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
     data_dictionary['chunk_noise_list_spl']     = np.array([])
-    data_dictionary['frames']                   = np.array([])
+    data_dictionary['frames']                   = [] # Wave data defined as byte list !
     
     print(f"is_recording: {data_dictionary['is_recording']}\n")
     while data_dictionary['is_recording']==True :
@@ -289,7 +289,7 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames']       =  np.append(data_dictionary['frames'], data)
+        data_dictionary['frames'].append(data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
@@ -338,7 +338,7 @@ def func_run_calibration(data_dictionary):
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames']       = np.append(data_dictionary['frames'], data)
+        data_dictionary['frames'].append(data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
@@ -394,7 +394,7 @@ def func_check_calibration(data_dictionary):
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames']       = np.append(data_dictionary['frames'], data)
+        data_dictionary['frames'].append(data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
@@ -557,7 +557,7 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
     start_chunk                 = 0
     stop_chunk                  = 0
     
-    noise_frames                = np.array([])
+    noise_frames                = [] # Wave data defined as byte list !
   
     #whole process will run in high priority mode, but lower than the Audio processing task
     p_func_saveWave_on_noise_event = psutil.Process(os.getpid())
@@ -638,7 +638,7 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
             max_spl_chunk_index = 0
             start_chunk = 0
             stop_chunk = 0
-            noise_frames                                = np.array([])
+            noise_frames                                = [] # Wave data defined as byte list !
         
             #remove chunks from wave output which are already treated. To free local resources.
             #data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
@@ -656,8 +656,12 @@ def func_on_saveWave_exit_click(data_dictionary):
         wf.setsampwidth(data_dictionary['sample_size'])
         wf.setframerate(RATE)
         wf.writeframes(b''.join(data_dictionary['frames']))
-        print(f"Audio saved as {OUTPUT_FILENAME}")
-
+        print(f"Audio saved as : {OUTPUT_FILENAME}")
+        print(f"CHANNELS : {CHANNELS}")
+        print(f"RATE : {RATE}")
+        print(f"data_dictionary['sample_size']: {data_dictionary['sample_size']}")
+        print(f"data_dictionary['frames']: {data_dictionary['frames']}")
+        
     # open the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'rb') as wav_file:
         sample_rate = wav_file.getframerate()  # Sample rate (samples per second)
@@ -1032,7 +1036,8 @@ if __name__ == "__main__":
         audio_data_max_pcm_value            = 0.0,
 
         #for output wave file creation / all chunks, complete measurement
-        frames                              = np.array([]),
+        # The wave raw data must be handled as byte list. Not numpy array !
+        frames                              = [],
 
         chunk_index_i                       = 0,
         chunk_noise_list_index              = np.array([], dtype=int),
@@ -1076,10 +1081,11 @@ if __name__ == "__main__":
     
         # Close audio interface
         p.terminate()
+        data_dictionary['frames']                               = [] # Wave data defined as byte list !
+        
         data_dictionary['chunk_index_i']                        = 0    # counter of processed chunks
         data_dictionary['chunk_noise_list_index']               = np.array([], dtype=int),
         data_dictionary['chunk_noise_list_spl']                 = np.array([])
-        data_dictionary['frames']                               = np.array([])
         data_dictionary['is_recording']                         = False
         data_dictionary['is_logging']                           = False
         data_dictionary['audio_data']                           = np.array([])
