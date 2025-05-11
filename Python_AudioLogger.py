@@ -63,7 +63,7 @@ from viztracer import VizTracer # visual thread debugging
 DEBUG == 0 # Default 
 DEBUG == 1 # tracer logs for runtime analysis
 '''
-DEBUG   = 1
+DEBUG   = 0
 
 # visual thead debugging
 if DEBUG == 1:
@@ -126,12 +126,51 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 config                  = None
 
 # Global variables to Initialize PyAudio in the main Init class
-p                       = None
+#p                       = None
 # Open stream to read audio from the microphone
-stream                  = None
+#stream                  = None
 
 
+def create_audio_stream(data_dictionary):
 
+    # Initialize PyAudio
+    p                   = pyaudio.PyAudio()
+    
+    # Open stream to read audio from the microphone
+    stream              = p.open(format=FORMAT,
+        channels=CHANNELS,
+        rate=RATE,
+        input=True,
+        input_device_index = data_dictionary['_device_index'] ,
+        frames_per_buffer=CHUNK)
+    
+    device_info = p.get_device_info_by_index(data_dictionary['_device_index'])
+    sample_size = p.get_sample_size(FORMAT)
+    print("Opening Audio stream with:\n")
+    print(f"  FORMAT: {FORMAT}\n")
+    print(f"  CHANNELS: {CHANNELS}\n")
+    print(f"  RATE: {RATE}\n")
+    print(f"  DEVICE INDEX: {data_dictionary['_device_index']}\n")
+    print(f"  CHUNK SIZE: {CHUNK}\n\n")
+
+    print(f"Selected device: {device_info['name']}\n")
+    print(f"Max Input Channels: {device_info['maxInputChannels']}\n")
+    print(f"Default Sample Rate: {device_info['defaultSampleRate']}\n")
+    print(f"Sample size in bytes: {sample_size}\n")
+    
+    return p, stream  # Return both the stream and the PyAudio instance
+
+
+def close_audio_stream(p, stream):
+    
+    # Close the stream and terminate PyAudio
+    stream.stop_stream()
+    stream.close()
+    
+    # Close audio interface
+    p.terminate()
+      
+        
 # Global Funtion definitions ##########################################
 def get_commit_version():
     try:
@@ -142,18 +181,23 @@ def get_commit_version():
         return "Not a git repository or error retrieving commit."
  
 def func_check_devices(data_dictionary):
-    global p
     i=0
+    
+    # Initialize PyAudio
+    # open audion stream input
+    p,_ = create_audio_stream(data_dictionary)
     
     # List available devices
     print("Available devices:")
     for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
             print(f"Device {i}: {device_info['name']}")
-
-
+    
+    #close audio stream
+    close_audio_stream(p, _)
+    
+        
 def func_on_button_setDevices_click(frame, data_dictionary):
-    global p
 
     
     data_dictionary['_device_index'] = 0
@@ -162,6 +206,10 @@ def func_on_button_setDevices_click(frame, data_dictionary):
 
     user_value = int(frame.text_ctrl.GetValue())
     
+    # Initialize PyAudio
+    # open audion stream input
+    p,_ = create_audio_stream(data_dictionary)
+    
     # Check if the input is within the valid range
     # obtain user text input for device selection
     if min_range <= user_value  <= max_range:
@@ -169,6 +217,9 @@ def func_on_button_setDevices_click(frame, data_dictionary):
         wx.MessageBox(f"Device {data_dictionary['_device_index']}: {p.get_device_info_by_index(data_dictionary['_device_index'])}","Info", wx.OK | wx.ICON_INFORMATION)
     else :
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
+
+    #close audio stream
+    close_audio_stream(p, _)
 
 
 def apply_a_weighting(data_dictionary):
@@ -261,14 +312,9 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     p_func_process_audio_input.nice(psutil.REALTIME_PRIORITY_CLASS)  
 
     # Initialize PyAudio
-    p_loc                                  = pyaudio.PyAudio()
-    # Open stream to read audio from the microphone
-    stream_loc = p_loc.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    input_device_index = data_dictionary['_device_index'] ,
-                    frames_per_buffer=CHUNK)
+    # open audion stream input
+    p_loc,stream_loc = create_audio_stream(data_dictionary)
+
     print("Audio stream opened [recording]\n")
     
     print("recording_process started 1/2\n")
@@ -279,6 +325,7 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
     data_dictionary['chunk_noise_list_spl']     = np.array([])
     data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    data = []
     
     print(f"is_recording: {data_dictionary['is_recording']}\n")
     while data_dictionary['is_recording']==True :
@@ -314,18 +361,21 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     print("Recording thread stopped.\n")
     recording_status_queue.put("Recording stopped ...\n")  # Send message to main process
 
-
-    p_loc.terminate()
+    #close audio stream
+    close_audio_stream(p_loc, stream_loc)
+  
     
 def func_run_calibration(data_dictionary):
-    global stream
 
-  
+    # Initialize PyAudio
+    # open audion stream input
+    _,stream = create_audio_stream(data_dictionary)
 
     calib_arr = np.array([])
     i= 0 
     data_dictionary['audio_data_max_pcm_value']  = 0
-    
+    data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    data = []
     
     while i<CALIB_ITERATION_LENGTH :
         
@@ -374,27 +424,33 @@ def func_run_calibration(data_dictionary):
     data_dictionary['system_calibration_factor_94db'] = calib_average
     print(f"Averaged data_dictionary['system_calibration_factor_94db']: {data_dictionary['system_calibration_factor_94db']}\n") 
        
-
+    #close audio stream
+    close_audio_stream(_, stream)
 
 
 def func_check_calibration(data_dictionary):
-    global stream
 
+    # Initialize PyAudio
+    # open audion stream input
+    _,stream = create_audio_stream(data_dictionary)
 
     spl_error_arr           = np.array([])
     spl_error_arr_square    = np.array([])
     i = 0
-   
+    data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    data = []
+    
     while i<CALIB_ITERATION_LENGTH :       
         i = i+1
         # Read a chunk of audio data
         data = stream.read(CHUNK)
-      
+        
         # Convert the audio data to a numpy array
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
         data_dictionary['frames'].append(data)
+
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary)
@@ -420,7 +476,9 @@ def func_check_calibration(data_dictionary):
     spl_error_average = np.sqrt(np.average(spl_error_square ))
     print(f"spl_error_average: {spl_error_average}\n")
 
-       
+    #close audio stream
+    close_audio_stream(_, stream)   
+
 
 def func_on_button_start_click(frame, data_dictionary):
 
@@ -647,7 +705,6 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
 
 
 
-
 def func_on_saveWave_exit_click(data_dictionary):
 
     # Write the recorded data to a WAV file
@@ -656,11 +713,8 @@ def func_on_saveWave_exit_click(data_dictionary):
         wf.setsampwidth(data_dictionary['sample_size'])
         wf.setframerate(RATE)
         wf.writeframes(b''.join(data_dictionary['frames']))
-        print(f"Audio saved as : {OUTPUT_FILENAME}")
-        print(f"CHANNELS : {CHANNELS}")
-        print(f"RATE : {RATE}")
-        print(f"data_dictionary['sample_size']: {data_dictionary['sample_size']}")
-        print(f"data_dictionary['frames']: {data_dictionary['frames']}")
+        print(f"Audio saved as : {OUTPUT_FILENAME}\n\n")
+
         
     # open the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'rb') as wav_file:
@@ -668,10 +722,14 @@ def func_on_saveWave_exit_click(data_dictionary):
         num_frames = wav_file.getnframes()
         num_channels = wav_file.getnchannels()
         sample_width = wav_file.getsampwidth()
-        num_frames = wav_file.getnframes()
            
         raw_data = wav_file.readframes(num_frames)
- 
+        print(f"Audio opened as : {OUTPUT_FILENAME}\n")
+        print(f"num_channels : {num_channels}\n")
+        print(f"sample_rate : {sample_rate}\n")
+        print(f"sample_width: {sample_width}\n")
+        print(f"num_frames: {num_frames}\n")
+        print(f"raw_data: {raw_data}\n\n")
     
     # read audio data and apply weighting filter    
     # Convert raw byte data into a numpy array
@@ -748,7 +806,7 @@ def func_on_saveWave_exit_click(data_dictionary):
 
     
     # Create a 2x2 grid of subplots (2 rows, 2 columns)
-    fig, axs = plt.subplots(2, 2, figsize=(10, 6))
+    _, axs = plt.subplots(2, 2, figsize=(10, 6))
     
     # First plot (top-left)
     axs[0, 0].plot(x1, y1)
@@ -797,10 +855,7 @@ class MyFrame(wx.Frame):
         # Load settings from previous sessions
         global config
 
-        global p
-        global stream
-
-        
+      
         print(f"data_dictionary['_device_index'] [default]:  {data_dictionary['_device_index']}")
         print(f"data_dictionary['system_calibration_factor_94db'][default]:  {data_dictionary['system_calibration_factor_94db']}")
         
@@ -821,19 +876,7 @@ class MyFrame(wx.Frame):
         # Print the commit hash
         print("Commit version:", get_commit_version())
         
-        # Initialize PyAudio
-        p                   = pyaudio.PyAudio()
-        # Open stream to read audio from the microphone
-        stream              = p.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    input_device_index = data_dictionary['_device_index'] ,
-                    frames_per_buffer=CHUNK)
-        data_dictionary['sample_size']     =   p.get_sample_size(FORMAT)
-        print("Audio stream opened [Init]\n")
-        
-        
+      
         # Create a panel inside the frame
         panel = wx.Panel(self)
    
@@ -1037,13 +1080,13 @@ if __name__ == "__main__":
 
         #for output wave file creation / all chunks, complete measurement
         # The wave raw data must be handled as byte list. Not numpy array !
-        frames                              = [],
+        frames                              = manager.list(), # must be ingtialised via manager
 
         chunk_index_i                       = 0,
         chunk_noise_list_index              = np.array([], dtype=int),
         chunk_noise_list_spl                = np.array([]),
 
-        sample_size                         = 2
+        sample_size                         = 2 #2bytes, pyaudio.paInt16
     )
       
 
@@ -1075,13 +1118,7 @@ if __name__ == "__main__":
         
 
     
-        # Close the stream and terminate PyAudio
-        stream.stop_stream()
-        stream.close()
-    
-        # Close audio interface
-        p.terminate()
-        data_dictionary['frames']                               = [] # Wave data defined as byte list !
+        data_dictionary['frames']                               = manager.list() # Wave data defined as byte list !
         
         data_dictionary['chunk_index_i']                        = 0    # counter of processed chunks
         data_dictionary['chunk_noise_list_index']               = np.array([], dtype=int),
