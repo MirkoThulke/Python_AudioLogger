@@ -633,11 +633,15 @@ def func_on_button_checkCalib_click(frame, data_dictionary):
     frame.checkCalib_thread.start()
 
 
-def func_on_button_exit_click(frame, data_dictionary, is_logging):
+def func_on_button_exit_click(frame, _device_index, system_calibration_factor_94db):
 
+    # Save the program state (configuration) to a file
+    with open('config.ini', 'w') as configfile:
+        config.write(configfile)
+        
     # Close the parent application and the GUI event loop (-> indicated by self)
     frame.Close()
-
+    app.ExitMainLoop()
 
 
 def func_saveWave_on_noise_event(data_dictionary, frames, is_logging,chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, recording_status_queue):
@@ -1055,7 +1059,7 @@ class MyFrame(wx.Frame):
     def on_button_exit_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_button_exit_click(self, data_dictionary, is_logging)
+        func_on_button_exit_click(self, _device_index, system_calibration_factor_94db)
         
         
     def on_button_saveWave_click(self, event):
@@ -1137,7 +1141,7 @@ if __name__ == "__main__":
         # Add settings to the config
         # Add USB device index
         # Add calibration value
-        config.set("Settings",".value", f"{_device_index.value}")
+        config.set("Settings","_device_index", f"{_device_index.value}")
         config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db.value}") 
         print(f"_device_index.value [saved]:  {_device_index.value}")
         print(f"system_calibration_factor_94db.value[saved]:  {system_calibration_factor_94db.value}")
