@@ -46,13 +46,17 @@ import wx # click button GUI
 import pyaudio
 from endolith_weighting_filters import A_weight
 import numpy as np
+import ctypes
 import wave
 import matplotlib.pyplot as plt
 import configparser
 import multiprocessing
+from multiprocessing import Manager, Value, Array
 import threading
 import subprocess
 import os
+import errno
+import sys
 import psutil
 import time
 import datetime
@@ -81,7 +85,9 @@ if DEBUG == 1:
 # ASIO buffer size 1024   
 # Sampling rate 48kHz
 # Format : 4 Channel 16 bits  
-
+# Driver : BEHRINGER_UMC_v5.72.0
+# Stereo button pressed
+# Padding not pressed
 
 # Set parameters for audio input
 FORMAT = pyaudio.paInt16  # Format for the audio
@@ -131,35 +137,61 @@ config                  = None
 #stream                  = None
 
 
-def create_audio_stream(data_dictionary):
+def create_audio_stream(_device_index, sample_size):
 
     # Initialize PyAudio
     p                   = pyaudio.PyAudio()
     
-    # Open stream to read audio from the microphone
-    stream              = p.open(format=FORMAT,
-        channels=CHANNELS,
-        rate=RATE,
-        input=True,
-        input_device_index = data_dictionary['_device_index'] ,
-        frames_per_buffer=CHUNK)
-    
-    device_info = p.get_device_info_by_index(data_dictionary['_device_index'])
-    sample_size = p.get_sample_size(FORMAT)
-    print("Opening Audio stream with:\n")
-    print(f"  FORMAT: {FORMAT}\n")
-    print(f"  CHANNELS: {CHANNELS}\n")
-    print(f"  RATE: {RATE}\n")
-    print(f"  DEVICE INDEX: {data_dictionary['_device_index']}\n")
-    print(f"  CHUNK SIZE: {CHUNK}\n\n")
+    # Only for information : 
+    format_constants = {
+    "paFloat32": pyaudio.paFloat32,
+    "paInt32":   pyaudio.paInt32,
+    "paInt24":   pyaudio.paInt24,
+    "paInt16":   pyaudio.paInt16,
+    "paInt8":    pyaudio.paInt8,
+    "paUInt8":   pyaudio.paUInt8,
+    "paCustomFormat": pyaudio.paCustomFormat,  # rarely used   
+    }
+    print("PyAudio FORMAT Constants:")
+    for name, value in format_constants.items():
+        print(f"{name:<15} = {value}")
 
-    print(f"Selected device: {device_info['name']}\n")
-    print(f"Max Input Channels: {device_info['maxInputChannels']}\n")
-    print(f"Default Sample Rate: {device_info['defaultSampleRate']}\n")
-    print(f"Sample size in bytes: {sample_size}\n")
-    
-    return p, stream  # Return both the stream and the PyAudio instance
+    try:    
+        stream       = p.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        input_device_index = _device_index.value ,
+                        frames_per_buffer=CHUNK)
+          
+        print("--- Opening stream with settings ---")
+        print(f"Channels: {CHANNELS}")
+        print(f"Rate: {RATE}")
+        print(f"Format: {FORMAT}")
+        print(f"Input Device Index: {_device_index}")
+        print(f"Chunk Size: {CHUNK}")
 
+        print("--- Actual stream settings ---")
+        print("Channels:           ", stream._channels)
+        print("Sample rate:        ", stream._rate)
+        print("Sample format:      ", stream._format)
+        print("p.get_device_info_by_index(_device_index.value):", p.get_device_info_by_index(_device_index.value))
+
+        return p, stream # Return both the stream and the PyAudio instance
+
+    except OSError as e:
+        if e.errno == -9998:
+            print("Error: Invalid number of channels. Set Device Number to 0 [default]. Then : Verify Device Number [0...100] and check Channel setting [1,2, ...]")
+        # Set device number to 0 . Default  !!  To unblock the system.
+        _device_index.value = 0
+        
+        # Wait for 3 seconds before exiting
+        time.sleep(3) 
+          
+        sys.exit(1)  # Exit with a non-zero status to indicate failure
+        return None, None
+    
+    
 
 def close_audio_stream(p, stream):
     
@@ -169,8 +201,10 @@ def close_audio_stream(p, stream):
     
     # Close audio interface
     p.terminate()
-      
-        
+
+    
+
+
 # Global Funtion definitions ##########################################
 def get_commit_version():
     try:
@@ -180,12 +214,12 @@ def get_commit_version():
     except subprocess.CalledProcessError:
         return "Not a git repository or error retrieving commit."
  
-def func_check_devices(data_dictionary):
+def func_check_devices(_device_index, sample_size):
     i=0
     
     # Initialize PyAudio
     # open audion stream input
-    p,_ = create_audio_stream(data_dictionary)
+    p,_ = create_audio_stream(_device_index, sample_size)
     
     # List available devices
     print("Available devices:")
@@ -197,29 +231,28 @@ def func_check_devices(data_dictionary):
     close_audio_stream(p, _)
     
         
-def func_on_button_setDevices_click(frame, data_dictionary):
+def func_on_button_setDevices_click(frame, _device_index, sample_size):
 
-    
-    data_dictionary['_device_index'] = 0
     min_range = 0
     max_range = 100
 
     user_value = int(frame.text_ctrl.GetValue())
+    print(f"user_value : {user_value}")
     
     # Initialize PyAudio
     # open audion stream input
-    p,_ = create_audio_stream(data_dictionary)
+    #p,_ = create_audio_stream(_device_index, sample_size)
     
     # Check if the input is within the valid range
     # obtain user text input for device selection
     if min_range <= user_value  <= max_range:
-        data_dictionary['_device_index'] = user_value
-        wx.MessageBox(f"Device {data_dictionary['_device_index']}: {p.get_device_info_by_index(data_dictionary['_device_index'])}","Info", wx.OK | wx.ICON_INFORMATION)
+        _device_index.value = user_value
+        wx.MessageBox(f"Device: {_device_index.value}","Info", wx.OK | wx.ICON_INFORMATION)
     else :
         wx.MessageBox(f"Error: The number must be between {min_range} and {max_range}.","Info", wx.OK | wx.ICON_INFORMATION)
 
     #close audio stream
-    close_audio_stream(p, _)
+    #close_audio_stream(p, _)
 
 
 def apply_a_weighting(data_dictionary):
@@ -244,7 +277,7 @@ def apply_a_weighting(data_dictionary):
     return ( int_array )
 
 
-def func_calc_SPL(data_dictionary):
+def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
  
 
     # reset output arrays :
@@ -293,7 +326,7 @@ def func_calc_SPL(data_dictionary):
     else :
         data_dictionary['audio_data_pressurePa_rms'] = 0           
    
-    data_dictionary['audio_data_pressurePa_rms_calib'] =data_dictionary['audio_data_pressurePa_rms'] * data_dictionary['system_calibration_factor_94db']
+    data_dictionary['audio_data_pressurePa_rms_calib'] =data_dictionary['audio_data_pressurePa_rms'] * system_calibration_factor_94db.value
     
     # convert RMS to SPL (explained below)
     # Reference pressure in air = 20 µPa
@@ -304,7 +337,7 @@ def func_calc_SPL(data_dictionary):
     #print(f"data_dictionary['audio_data_pressurePa_spl']: {data_dictionary['audio_data_pressurePa_spl']}")      
 
 
-def func_process_audio_input(data_dictionary, recording_status_queue, recording_dba_queue):
+def func_process_audio_input(data_dictionary, frames, system_calibration_factor_94db, _device_index, sample_size,chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, recording_status_queue, recording_dba_queue):
 
  
     #whole process will run in high priority mode
@@ -313,7 +346,7 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
 
     # Initialize PyAudio
     # open audion stream input
-    p_loc,stream_loc = create_audio_stream(data_dictionary)
+    p_loc,stream_loc = create_audio_stream(_device_index, sample_size)
 
     print("Audio stream opened [recording]\n")
     
@@ -321,14 +354,14 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     
     
     #reset audio input related lists and counters
-    data_dictionary['chunk_index_i']            = 0    # counter of processed chunks
-    data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
-    data_dictionary['chunk_noise_list_spl']     = np.array([])
-    data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    chunk_index_i.value            = 0    # counter of processed chunks
+    chunk_noise_list_index[:] = []
+    chunk_noise_list_spl[:] = []
+    frames[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
     
-    print(f"is_recording: {data_dictionary['is_recording']}\n")
-    while data_dictionary['is_recording']==True :
+    print(f"is_recording: {is_recording.value}\n")
+    while is_recording.value==True :
         # Read a chunk of audio data
         data = stream_loc.read(CHUNK)
       
@@ -336,26 +369,27 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames'].append(data)
+        frames.append(data)
+        print(f"data : {data}\n")
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL(data_dictionary)
+        func_calc_SPL(data_dictionary, system_calibration_factor_94db)
         
         #chunk counter
-        data_dictionary['chunk_index_i'] = data_dictionary['chunk_index_i']+1
+        chunk_index_i.value = chunk_index_i.value+1
 
-        recording_status_queue.put(f"Recording running. Number of chunks processed: {data_dictionary['chunk_index_i']}\n")  # Send message to main process
-        print(f"chunk_index : {data_dictionary['chunk_index_i']}\n")
+        recording_status_queue.put(f"Recording running. Number of chunks processed: {chunk_index_i.value}\n")  # Send message to main process
+        print(f"chunk_index : {chunk_index_i.value}\n")
         
         # Print dbA on GUI
         recording_dba_queue.put(f"{round(data_dictionary['audio_data_pressurePa_spl'], 2)} [dbA]\n")  # Send message to main process
 
         
         if data_dictionary['audio_data_pressurePa_spl'] > SPL_MAX_DAY_DBA :
-            data_dictionary['chunk_noise_list_index']   = np.append(data_dictionary['chunk_noise_list_index'], data_dictionary['chunk_index_i'])
-            data_dictionary['chunk_noise_list_spl']     = np.append(data_dictionary['chunk_noise_list_spl'], data_dictionary['audio_data_pressurePa_spl'])
-            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")            
-            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
+            chunk_noise_list_index   = np.append(chunk_noise_list_index, chunk_index_i.value)
+            chunk_noise_list_spl     = np.append(chunk_noise_list_spl, data_dictionary['audio_data_pressurePa_spl'])
+            print(f"chunk_noise_list_index : {chunk_noise_list_index}\n")            
+            print(f"chunk_noise_list_spl : {chunk_noise_list_spl}\n")
             
 
     print("Recording thread stopped.\n")
@@ -365,16 +399,16 @@ def func_process_audio_input(data_dictionary, recording_status_queue, recording_
     close_audio_stream(p_loc, stream_loc)
   
     
-def func_run_calibration(data_dictionary):
+def func_run_calibration(data_dictionary, frames, _device_index, sample_size , system_calibration_factor_94db):
 
     # Initialize PyAudio
     # open audion stream input
-    _,stream = create_audio_stream(data_dictionary)
+    _,stream = create_audio_stream(_device_index, sample_size )
 
     calib_arr = np.array([])
     i= 0 
     data_dictionary['audio_data_max_pcm_value']  = 0
-    data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    frames[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
     
     while i<CALIB_ITERATION_LENGTH :
@@ -388,10 +422,10 @@ def func_run_calibration(data_dictionary):
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames'].append(data)
+        frames.append(data)
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL(data_dictionary)
+        func_calc_SPL(data_dictionary, system_calibration_factor_94db)
         
         
         if data_dictionary['audio_data_pressurePa_rms'] > 0 : 
@@ -421,23 +455,23 @@ def func_run_calibration(data_dictionary):
     calib_average = sum(calib_arr) / len(calib_arr)
     
     #store average as new calibration factor
-    data_dictionary['system_calibration_factor_94db'] = calib_average
-    print(f"Averaged data_dictionary['system_calibration_factor_94db']: {data_dictionary['system_calibration_factor_94db']}\n") 
+    system_calibration_factor_94db.value = calib_average
+    print(f"Averaged system_calibration_factor_94db.value: {system_calibration_factor_94db.value}\n") 
        
     #close audio stream
     close_audio_stream(_, stream)
 
 
-def func_check_calibration(data_dictionary):
+def func_check_calibration(data_dictionary, frames, _device_index, sample_size):
 
     # Initialize PyAudio
     # open audion stream input
-    _,stream = create_audio_stream(data_dictionary)
+    _,stream = create_audio_stream(_device_index, sample_size)
 
     spl_error_arr           = np.array([])
     spl_error_arr_square    = np.array([])
     i = 0
-    data_dictionary['frames']                   = [] # Wave data defined as byte list !
+    frames[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
     
     while i<CALIB_ITERATION_LENGTH :       
@@ -449,11 +483,11 @@ def func_check_calibration(data_dictionary):
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
         #for output wave file creation, add to a list
-        data_dictionary['frames'].append(data)
+        frames.append(data)
 
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL(data_dictionary)
+        func_calc_SPL(data_dictionary, system_calibration_factor_94db)
         
         
         if data_dictionary['audio_data_pressurePa_spl'] > 0 : 
@@ -480,7 +514,7 @@ def func_check_calibration(data_dictionary):
     close_audio_stream(_, stream)   
 
 
-def func_on_button_start_click(frame, data_dictionary):
+def func_on_button_start_click(frame, data_dictionary, frames, is_recording, is_logging):
 
     # Enable / Disable buttons
     frame.button_start.Disable()
@@ -488,10 +522,10 @@ def func_on_button_start_click(frame, data_dictionary):
     
     # Start recording process
     wx.CallAfter(frame.update_status,  "Start button pressed...\n")
-    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
-    if not data_dictionary['is_recording']:
-        data_dictionary['is_recording'] = True
-        print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
+    print(f"is_recording.value: {is_recording.value}\n")
+    if not is_recording.value:
+        is_recording.value = True
+        print(f"is_recording.value: {is_recording.value}\n")
         # Create a separate processto run the audio processing task
         # The processes are required to decouple the input stream reading from the GUI app 
         
@@ -500,7 +534,7 @@ def func_on_button_start_click(frame, data_dictionary):
             try:
                 print("Creating and starting recording process...\n")
 
-                frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary,frame.recording_status_queue,frame.recording_dba_queue,))
+                frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary, frames, system_calibration_factor_94db,_device_index, sample_size,chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, frame.recording_status_queue, frame.recording_dba_queue,))
                 print("recording process created\n")
             
                 # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
@@ -522,11 +556,11 @@ def func_on_button_start_click(frame, data_dictionary):
         wx.CallAfter(frame.update_status,  "recording process is already running 2.\n")
         print("recording process is already running 2.\n")
 
-    print(f"logging process will be started: {data_dictionary['is_logging']}\n")   
+    print(f"logging process will be started: {is_logging.value}\n")   
     # Start logging thread
-    if not data_dictionary['is_logging']:
-        data_dictionary['is_logging'] = True
-        print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
+    if not is_logging.value:
+        is_logging.value = True
+        print(f"is_logging.value: {is_logging.value}\n")
         # Create a separate thread to run the process
         # The thread is required to decouple the input stream reading from the GUI app 
 
@@ -536,7 +570,7 @@ def func_on_button_start_click(frame, data_dictionary):
             # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
            
-            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary,frame.logging_status_queue,))
+            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary, frames, is_logging,chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, frame.recording_status_queue,))
             print("logging process created\n")
  
             frame.logging_process.start()
@@ -552,20 +586,20 @@ def func_on_button_start_click(frame, data_dictionary):
         print("logging Thread is already running 2.\n")
 
 
-def func_on_button_stop_click(frame, data_dictionary):
+def func_on_button_stop_click(frame, data_dictionary, is_recording, is_logging):
 
     
     # Enable / Disable buttons
     frame.button_start.Enable()
     frame.button_stop.Disable()
     
-    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
-    data_dictionary['is_recording'] = False
-    print(f"data_dictionary['is_recording']: {data_dictionary['is_recording']}\n")
+    print(f"is_recording.value: {is_recording.value}\n")
+    is_recording.value = False
+    print(f"is_recording.value: {is_recording.value}\n")
     
-    print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
-    data_dictionary['is_logging'] = False
-    print(f"data_dictionary['is_logging']: {data_dictionary['is_logging']}\n")
+    print(f"is_logging.value: {is_logging.value}\n")
+    is_logging.value = False
+    print(f"is_logging.value: {is_logging.value}\n")
     
     if frame.recording_process is not None and frame.recording_process.is_alive():
         frame.recording_process.join()  # Wait for the process to finish gracefully
@@ -584,7 +618,7 @@ def func_on_button_runCalib_click(frame, data_dictionary):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.runCalib_thread   =threading.Thread(target=func_run_calibration, args=(data_dictionary,))
+    frame.runCalib_thread   =threading.Thread(target=func_run_calibration, args=(data_dictionary, frames, _device_index, sample_size , system_calibration_factor_94db,))
     frame.runCalib_thread.daemon = True
     frame.runCalib_thread.start()
 
@@ -594,19 +628,19 @@ def func_on_button_checkCalib_click(frame, data_dictionary):
     
     # Create a separate thread to run the process
     # The thread is required to decouple the input stream reading from the GUI app 
-    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration, args=(data_dictionary,))
+    frame.checkCalib_thread  =threading.Thread(target=func_check_calibration, args=(data_dictionary, frames,  _device_index, sample_size,))
     frame.checkCalib_thread.daemon = True
     frame.checkCalib_thread.start()
 
 
-def func_on_button_exit_click(frame, data_dictionary):
+def func_on_button_exit_click(frame, data_dictionary, is_logging):
 
     # Close the parent application and the GUI event loop (-> indicated by self)
     frame.Close()
 
 
 
-def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
+def func_saveWave_on_noise_event(data_dictionary, frames, is_logging,chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, recording_status_queue):
 
 
     max_spl_in_chunk            = 0
@@ -627,19 +661,19 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
     #Start with offset of wave output length
     time.sleep(WAVE_DT_SEC)
     
-    while data_dictionary['is_logging']:  
+    while is_logging.value:  
         
              
         # check if events are detected and stored in the list
-        if data_dictionary['chunk_noise_list_index'] is not None and data_dictionary['chunk_noise_list_index'].size > 0 :
+        if chunk_noise_list_index is not None and len(chunk_noise_list_index) > 0 :
             print("\nNew Recording event: \n")
             
             #identify max spl value and repsective chunk number 
-            max_spl_in_chunk = np.max(data_dictionary['chunk_noise_list_spl'])
-            max_spl_index_in_chunk = np.where(data_dictionary['chunk_noise_list_spl'] == max_spl_in_chunk)[0][0]
+            max_spl_in_chunk = np.max(chunk_noise_list_spl)
+            max_spl_index_in_chunk = np.where(chunk_noise_list_spl == max_spl_in_chunk)[0][0]
  
             #index of the chunk with maximum spl 
-            max_spl_chunk_index = data_dictionary['chunk_noise_list_index'][max_spl_index_in_chunk]
+            max_spl_chunk_index = chunk_noise_list_index[max_spl_index_in_chunk]
         
             #extract the relevant noise frames + some delta
             start_chunk = max(int(max_spl_chunk_index-CHUNK_DNUM), 0)
@@ -647,16 +681,16 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
 
             
             # Wait for minimum time CHUNK_DNUM before saveing to add delta to the wave. 
-            while data_dictionary['chunk_index_i'] < stop_chunk :
+            while chunk_index_i.value < stop_chunk :
                 pass  # This does nothing, just a placeholder
             
             print("Noise events will be written: \n")
-            print(f"data_dictionary['chunk_noise_list_index'] : {data_dictionary['chunk_noise_list_index']}\n")
-            print(f"data_dictionary['chunk_noise_list_spl'] : {data_dictionary['chunk_noise_list_spl']}\n")
+            #print(f"chunk_noise_list_index : {chunk_noise_list_index}\n")
+            #print(f"chunk_noise_list_spl : {chunk_noise_list_spl}\n")
             print(f"start_chunk is : {start_chunk}\n")
             print(f"stop_chunk is : {stop_chunk}\n")
             
-            noise_frames = data_dictionary['frames'][start_chunk:stop_chunk]
+            noise_frames = frames[start_chunk:stop_chunk]
         
             
             # Get the current local time
@@ -681,15 +715,15 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
 
             with wave.open(full_path, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
-                wf.setsampwidth(data_dictionary['sample_size'])
+                wf.setsampwidth(sample_size.value)
                 wf.setframerate(RATE)
                 wf.writeframes(b''.join(noise_frames))
                 print(f"Audio saved as {noise_file_name}\n")
 
 
             #erase noise event arrays
-            data_dictionary['chunk_noise_list_index']   = np.array([], dtype=int)
-            data_dictionary['chunk_noise_list_spl']     = np.array([])
+            chunk_noise_list_index[:] = []
+            chunk_noise_list_spl[:] = []
             
             max_spl_in_chunk = 0
             max_spl_index_in_chunk = 0
@@ -699,20 +733,20 @@ def func_saveWave_on_noise_event(data_dictionary, recording_status_queue):
             noise_frames                                = [] # Wave data defined as byte list !
         
             #remove chunks from wave output which are already treated. To free local resources.
-            #data_dictionary['frames'] = data_dictionary['frames'][start_chunk:]
+            #frames = frames[start_chunk:]
             
             recording_status_queue.put(f"DataID_{max_spl_chunk_index}__dB_{max_spl_in_chunk}__Horaire:_{rounded_time}.wav")  # Send message to main process
 
 
 
-def func_on_saveWave_exit_click(data_dictionary):
+def func_on_saveWave_exit_click(data_dictionary, frames):
 
     # Write the recorded data to a WAV file
     with wave.open(OUTPUT_FILENAME, 'wb') as wf:
         wf.setnchannels(CHANNELS)
-        wf.setsampwidth(data_dictionary['sample_size'])
+        wf.setsampwidth(sample_size.value)
         wf.setframerate(RATE)
-        wf.writeframes(b''.join(data_dictionary['frames']))
+        wf.writeframes(b''.join(frames))
         print(f"Audio saved as : {OUTPUT_FILENAME}\n\n")
 
         
@@ -855,10 +889,7 @@ class MyFrame(wx.Frame):
         # Load settings from previous sessions
         global config
 
-      
-        print(f"data_dictionary['_device_index'] [default]:  {data_dictionary['_device_index']}")
-        print(f"data_dictionary['system_calibration_factor_94db'][default]:  {data_dictionary['system_calibration_factor_94db']}")
-        
+
         
         # To persist Settings -> Initialise a config object.
         config  = configparser.ConfigParser()
@@ -866,12 +897,12 @@ class MyFrame(wx.Frame):
         config.read('config.ini')
         
         # Access values from the config
-        data_dictionary['_device_index']                     = config.getint('Settings', "_device_index")
-        data_dictionary['system_calibration_factor_94db']    = config.getfloat('Settings', "system_calibration_factor_94db") 
-
+        _device_index.value                     = config.getint('Settings', "_device_index")
+        system_calibration_factor_94db.value    = config.getfloat('Settings', "system_calibration_factor_94db") 
+        
         # getint is used for integers
-        print(f"data_dictionary['_device_index'][loaded from config file]:  {data_dictionary['_device_index']}")
-        print(f"data_dictionary['system_calibration_factor_94db'][loaded from config file]:  {data_dictionary['system_calibration_factor_94db']}")
+        print(f"_device_index.value[loaded from config file]:  {_device_index.value}")
+        print(f"system_calibration_factor_94db.value[loaded from config file]:  {system_calibration_factor_94db.value}")
 
         # Print the commit hash
         print("Commit version:", get_commit_version())
@@ -898,7 +929,7 @@ class MyFrame(wx.Frame):
         self.checkCalib_thread          = None
             
         # Create a text box for user input
-        self.text_ctrl   = wx.TextCtrl(panel, value=str(data_dictionary['_device_index']), pos=(290, 40), size=(30, 25))
+        self.text_ctrl   = wx.TextCtrl(panel, value=str(_device_index.value), pos=(290, 40), size=(30, 25))
 
         # Create a button on the panel
         self.button_checkDevices = wx.Button(panel, label="CheckDevices", pos=(200, 10))
@@ -993,22 +1024,22 @@ class MyFrame(wx.Frame):
         """Event handler function for the button click."""
         wx.MessageBox("Check Device List in console and set device number in the text box!!", "Info", wx.OK | wx.ICON_INFORMATION)
         # Call the check device function
-        func_check_devices(data_dictionary)
+        func_check_devices(_device_index, sample_size)
 
             
     def on_button_setDevices_click(self, event):  
         # Call function
-        func_on_button_setDevices_click(self, data_dictionary)
+        func_on_button_setDevices_click(self, _device_index, sample_size)
 
 
     def on_button_start_click(self, event):
         # Call function
-        func_on_button_start_click(self, data_dictionary)
+        func_on_button_start_click(self, data_dictionary, frames, is_recording, is_logging)
 
             
     def on_button_stop_click(self, event):       
         # Call function
-        func_on_button_stop_click(self, data_dictionary)
+        func_on_button_stop_click(self, data_dictionary, is_recording, is_logging)
 
 
     def on_button_runCalib_click(self, event):
@@ -1024,13 +1055,13 @@ class MyFrame(wx.Frame):
     def on_button_exit_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_button_exit_click(self, data_dictionary)
+        func_on_button_exit_click(self, data_dictionary, is_logging)
         
         
     def on_button_saveWave_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_saveWave_exit_click(data_dictionary)
+        func_on_saveWave_exit_click(data_dictionary, frames)
         
     
 
@@ -1047,49 +1078,48 @@ if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True)  # optional but clear
     
     # Defined in shared memory to allow several processes to work on the data : multiprocessing."
-    # values must be accessed via .value postfix ! 
     # arrays do not require to have a postfix.
 
     # DataDictionary
     manager = multiprocessing.Manager()
 
-    data_dictionary = manager.dict(
+    # PROCESS LOCAL COPIES ########################    
+    # variables with process local copies   
+    data_dictionary = manager.dict({
         
-        # Device list user input 
-        _device_index                           = 0,
-        is_recording                            = False,
-        is_logging                              = False,
-        
-        # Microphone calibration factor to obtain 94dB at 1kHz. Default value 1
-        system_calibration_factor_94db          = 1.0, 
-        
-        # audio data extraceted from chunk in np format.
-        audio_data                          = np.array([]),
-        a_weighted_signal                   = np.array([]),
-        audio_data_pcm_abs                  = np.array([]),
-        audio_data_mV                       = np.array([]),
-        audio_data_mV_calib                 = np.array([]),
-        audio_data_pressurePa               = np.array([]),
-        audio_data_pressurePa_square        = np.array([]),  
-        
-        audio_data_pressurePa_squareMean    = 0.0,
-        audio_data_pressurePa_rms           = 0.0,
-        audio_data_pressurePa_rms_calib     = 0.0,
-        audio_data_pressurePa_spl           = 0.0,
-        audio_data_max_pcm_value            = 0.0,
+    "audio_data": np.array([]),
+    "a_weighted_signal": np.array([]),
+    "audio_data_pcm_abs": np.array([]),
+    "audio_data_mV": np.array([]),
+    "audio_data_mV_calib": np.array([]),
+    "audio_data_pressurePa": np.array([]),
+    "audio_data_pressurePa_square": np.array([]),
 
-        #for output wave file creation / all chunks, complete measurement
-        # The wave raw data must be handled as byte list. Not numpy array !
-        frames                              = manager.list(), # must be ingtialised via manager
-
-        chunk_index_i                       = 0,
-        chunk_noise_list_index              = np.array([], dtype=int),
-        chunk_noise_list_spl                = np.array([]),
-
-        sample_size                         = 2 #2bytes, pyaudio.paInt16
-    )
-      
-
+    "audio_data_pressurePa_squareMean": 0.0,
+    "audio_data_pressurePa_rms": 0.0,
+    "audio_data_pressurePa_rms_calib": 0.0,
+    "audio_data_pressurePa_spl": 0.0,
+    "audio_data_max_pcm_value": 0.0
+    
+     })
+    ################################################
+       
+    ################################################
+    #SHARED MEMORY
+    
+    # global variables a single shared memory allocation
+    _device_index                   = manager.Value('i', 0)  # Shared integer
+    sample_size                     = manager.Value('i', 2)  # Shared integer  # Bytes, e.g. for pyaudio.paInt16 
+    is_recording                    = manager.Value(ctypes.c_bool, False)  # Shared boolean
+    is_logging                      = manager.Value(ctypes.c_bool, False)  # Shared boolean
+    system_calibration_factor_94db  = manager.Value('d', 1.0)  # Shared float
+    frames                          = manager.list()  # Manager-backed shared list
+    chunk_index_i                   = manager.Value('i', 0)  # Shared integer
+    chunk_noise_list_index          = manager.list() # Manager-backed shared list
+    chunk_noise_list_spl            = manager.list() # Manager-backed shared list
+    
+    ################################################
+  
     app = MyApp()
 
     # Wrap the main event loop in a try-except block
@@ -1107,24 +1137,17 @@ if __name__ == "__main__":
         # Add settings to the config
         # Add USB device index
         # Add calibration value
-        config.set("Settings","_device_index", f"{data_dictionary['_device_index']}")
-        config.set("Settings","system_calibration_factor_94db", f"{data_dictionary['system_calibration_factor_94db']}") 
-        print(f"data_dictionary['_device_index'] [saved]:  {data_dictionary['_device_index']}")
-        print(f"data_dictionary['system_calibration_factor_94db'][saved]:  {data_dictionary['system_calibration_factor_94db']}")
+        config.set("Settings",".value", f"{_device_index.value}")
+        config.set("Settings","system_calibration_factor_94db", f"{system_calibration_factor_94db.value}") 
+        print(f"_device_index.value [saved]:  {_device_index.value}")
+        print(f"system_calibration_factor_94db.value[saved]:  {system_calibration_factor_94db.value}")
     
         # Save the program state (configuration) to a file
         with open('config.ini', 'w') as configfile:
             config.write(configfile)
         
 
-    
-        data_dictionary['frames']                               = manager.list() # Wave data defined as byte list !
-        
-        data_dictionary['chunk_index_i']                        = 0    # counter of processed chunks
-        data_dictionary['chunk_noise_list_index']               = np.array([], dtype=int),
-        data_dictionary['chunk_noise_list_spl']                 = np.array([])
-        data_dictionary['is_recording']                         = False
-        data_dictionary['is_logging']                           = False
+        #Process LOCALS
         data_dictionary['audio_data']                           = np.array([])
         data_dictionary['audio_data_pcm_abs']                   = np.array([])
         data_dictionary['audio_data_mV']                        = np.array([])
@@ -1136,6 +1159,14 @@ if __name__ == "__main__":
         data_dictionary['audio_data_pressurePa_rms_calib']      = 0
         data_dictionary['audio_data_pressurePa_spl']            = 0
         data_dictionary['audio_data_max_pcm_value']             = 0
+        
+        #SHARED MEMORY
+        frames[:]                                               = [] #manager.list
+        chunk_index_i.value                                     = 0    # counter of processed chunks
+        chunk_noise_list_index[:]                               = []
+        chunk_noise_list_spl[:]                                 = []
+        is_recording.value                                      = False
+        is_logging.value                                        = False
         
         # Terminate running process, in case they are not closed already.
         #if recording_process.is_alive() :
