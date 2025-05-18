@@ -444,12 +444,12 @@ def func_run_calibration(data_dictionary, frames, _device_index, sample_size , s
     # Check if the input PCM coded signal at 94dB calibration db (which is quite loud) is using the full range of the sint16 signal range
     # Check maximum across all chunks, see while loop
     print(f"Maximum PCM  amplitude: {data_dictionary['audio_data_max_pcm_value']}\n")
-    if data_dictionary['audio_data_max_pcm_value'] > int(MAX_INT16*0.95) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
+    if data_dictionary['audio_data_max_pcm_value'] > int(MAX_INT16*0.9) :
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}. Upper threshold: {int(MAX_INT16*0.95)} . Reduce GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)       
     elif data_dictionary['audio_data_max_pcm_value'] < int(MAX_INT16*0.8) :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}. lower threshold: {int(MAX_INT16*0.8)}  . Increase GAIN on PreAmp !\n","Info", wx.OK | wx.ICON_INFORMATION)      
     else :
-        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}/{MAX_INT16}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
+        wx.MessageBox(f"Maximum PCM 16bit amplitude: {data_dictionary['audio_data_max_pcm_value']}. PreAmp GAIN OK !\n","Info", wx.OK | wx.ICON_INFORMATION)
     
     # calculate average calibration factor across all chunks, see while loop
     calib_average = sum(calib_arr) / len(calib_arr)
