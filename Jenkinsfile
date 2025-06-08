@@ -27,7 +27,8 @@ pipeline {
                     echo "Building the project..."
                     // Add your build commands here
                     // For example: mvn clean install, npm install, etc.
-                    sleep 2 // simulate build
+                    
+                    bat 'python setup.py build'
                     
                     script {
                         githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
