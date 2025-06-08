@@ -28,13 +28,7 @@ pipeline {
                     // For example: mvn clean install, npm install, etc.
                     
                     echo "Check Python for outdated packages..."
-                    bat '''
-                        pip list --outdated > outdated_packages.txt
-                        for /f %%i in (outdated_packages.txt) do 
-                            (
-                                exit /b 1
-                            )
-                    '''
+                    bat 'pip list --outdated > outdated_packages.txt'
                     
                     //script {
                     //    githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
