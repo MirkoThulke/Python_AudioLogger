@@ -45,6 +45,7 @@ cmd> pip list --outdated
 import wx # click button GUI
 import pyaudio
 from endolith_weighting_filters import A_weight
+from scipy.signal import cheby2, lfilter
 import numpy as np
 import ctypes
 import wave
@@ -62,6 +63,8 @@ import time
 import datetime
 from viztracer import VizTracer # visual thread debugging
 
+
+LOWPASS = 1
 
 '''
 DEBUG == 0 # Default 
@@ -125,6 +128,20 @@ OUTPUT_FILENAME = "output.wav"  # Output WAV file
 OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
+
+# Constants for the Chebyshev Type II filter 
+CUTOFF = 400        # Cutoff frequency in Hz
+ORDER = 6           # Filter order
+STOPBAND_ATTEN = 80 # Stopband attenuation in dB
+# Design Chebyshev Type II low-pass filter
+nyquist = RATE / 2
+normal_cutoff = CUTOFF / nyquist
+cheby2_b, cheby2_a = cheby2(ORDER, STOPBAND_ATTEN, normal_cutoff, btype='low', analog=False)
+
+
+print(f"cheby2_b : {cheby2_b}")
+print(f"cheby2_a : {cheby2_a}")
+print(f"normal_cutoff : {normal_cutoff}")
 
 
 # Global Variables NOT in shared memory #######################################
@@ -256,6 +273,15 @@ def func_on_button_setDevices_click(frame, _device_index):
     #close_audio_stream(p, _)
 
 
+def on_button_selectFilter_click(self, event):
+    if self.toggle_btn.GetValue():
+            self.toggle_btn.SetLabel("ON")
+            self.status_label.SetLabel("Current state: ON")
+    else:
+            self.toggle_btn.SetLabel("OFF")
+            self.status_label.SetLabel("Current state: OFF")
+
+
 def apply_a_weighting(data_dictionary):
     """Apply the A-weighting filter to the signal"""
 
@@ -278,11 +304,35 @@ def apply_a_weighting(data_dictionary):
     return ( int_array )
 
 
+def apply_low_pass(data_dictionary):
+    #Chebyshev Type II low-pass filter
+    global cheby2_b
+    global cheby2_a
+    
+    # convert to float for filtering
+    int_array  = data_dictionary['audio_data'].astype(np.int16)
+    
+
+    # Apply A-weighting
+    filtered_data = lfilter(cheby2_b, cheby2_a, int_array)
+    
+    #convert back to integer for further processing
+    int_array   = filtered_data.astype(np.int16)
+    
+    #print(f'audio_data: {audio_data}')
+    #print(f'float_array: {float_array}')
+    #print(f'float_array_filt: {float_array_filt}') 
+    #print(f'int_array: {int_array}')   
+    
+    return ( int_array )
+
+
 def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
  
 
     # reset output arrays :
     data_dictionary['a_weighted_signal']                        = np.zeros(data_dictionary['a_weighted_signal'].shape)
+    data_dictionary['lowpass_signal']                           = np.zeros(data_dictionary['lowpass_signal'].shape)
     data_dictionary['audio_data_pcm_abs']                       = np.zeros(data_dictionary['audio_data_pcm_abs'].shape)
     data_dictionary['audio_data_mV']                            = np.zeros(data_dictionary['audio_data_mV'].shape)
     data_dictionary['audio_data_pressurePa']                    = np.zeros(data_dictionary['audio_data_pressurePa'].shape)
@@ -297,18 +347,29 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
     # Apply A-weighting to the signal
     # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
     # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
-    data_dictionary['a_weighted_signal'] = apply_a_weighting(data_dictionary)
-
+    if not LOWPASS :
+        data_dictionary['a_weighted_signal'] = apply_a_weighting(data_dictionary)
+    else :
+        data_dictionary['lowpass_signal'] = apply_low_pass(data_dictionary)
+        
     # Check  the maximum absolute value
-    audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['a_weighted_signal']))
-    
+    if not LOWPASS :
+        audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['a_weighted_signal']))
+    else :
+        audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['lowpass_signal'])) 
+         
     # save if highest of all chunks
     data_dictionary['audio_data_max_pcm_value'] = max(data_dictionary['audio_data_max_pcm_value'], audio_data_max_pcm_value_new)
     # Example: Process the audio (e.g., calculate RMS for volume level) 
-        
-    # Absolute values first      
-    data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['a_weighted_signal'])
+
+ 
+    # Absolute values first
+    if not LOWPASS :    
+        data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['a_weighted_signal'])
+    else :
+        data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['lowpass_signal'])
     
+      
     # Convert to mV using the Sensitivy value of the microphone/ Assuming that the microphone uses the full int16 signale range . 
     # Applying a preamp gain factor (only for better understanding)
     data_dictionary['audio_data_mV'] = data_dictionary['audio_data_pcm_abs'] / PRE_AMP_GAIN_LIN
@@ -375,7 +436,7 @@ def func_process_audio_input(data_dictionary, frames, system_calibration_factor_
         
         #for output wave file creation, add to a list
         frames.append(data)
-        print(f"data : {data}\n")
+        #print(f"data : {data}\n")
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary, system_calibration_factor_94db)
@@ -780,8 +841,14 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     # Convert raw byte data into a numpy array
     # For 16-bit audio (common for WAV), use np.int16
     data_dictionary['audio_data'] = np.frombuffer(raw_data, dtype=np.int16)
-    # A-weighted audio data
-    audio_data_weighted =   apply_a_weighting(data_dictionary)
+    # A-weighted or lowpass audio data
+
+    if not LOWPASS :
+        audio_data_filtered = apply_a_weighting(data_dictionary)
+    else :
+        audio_data_filtered = apply_low_pass(data_dictionary)
+    
+    
     # Create a time axis for plotting
     time = np.linspace(0, num_frames / sample_rate, num_frames)
    
@@ -791,20 +858,21 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     # Perform FFT on the audio signal
     fft_signal = np.fft.fft(data_dictionary['audio_data'])
     # Perform FFT on the audio signal
-    fft_signal_weighted = np.fft.fft(audio_data_weighted)
+    fft_signal_filtered = np.fft.fft(audio_data_filtered)
 
+        
     # Compute the corresponding frequencies
     frequencies = np.fft.fftfreq(len(fft_signal), d=1/RATE)
     
     # Get the magnitude of the FFT
     fft_magnitude = np.abs(fft_signal)
         # Get the magnitude of the FFT
-    fft_magnitude_weighted = np.abs(fft_signal_weighted)
+    fft_magnitude_filtered = np.abs(fft_signal_filtered)
     
     # We only want the positive frequencies
     positive_frequencies = frequencies[:len(frequencies)//2]
     positive_magnitude = fft_magnitude[:len(frequencies)//2]
-    positive_magnitude_weighted = fft_magnitude_weighted[:len(frequencies)//2]    
+    positive_magnitude_filtered = fft_magnitude_filtered[:len(frequencies)//2]    
  
     '''
     # Plot the waveform
@@ -827,13 +895,13 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     y1 = data_dictionary['audio_data']
 
     x2 = time
-    y2 = audio_data_weighted
+    y2 = audio_data_filtered
     
     x3 = positive_frequencies
     y3 = positive_magnitude
     
     x4 = positive_frequencies
-    y4 = positive_magnitude_weighted
+    y4 = positive_magnitude_filtered
     
     
 
@@ -846,7 +914,7 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     xmax_f = 16000
     
     ymin_f = 0
-    ymax_f = max(max(positive_magnitude_weighted),max(positive_magnitude))
+    ymax_f = max(max(positive_magnitude_filtered),max(positive_magnitude))
 
 
     
@@ -862,7 +930,10 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     
     # Third plot (bottom-left)
     axs[1, 0].plot(x2, y2)
-    axs[1, 0].set_title('A-weighted audio time domain')
+    if not LOWPASS :
+        axs[1, 0].set_title('A-weighted audio time domain')
+    else :
+        axs[1, 0].set_title('Lowpass audio time domain')   
     axs[1, 0].set_xlabel("Time [s]")
     axs[1, 0].set_ylabel('PCM encoded audio [sint16]')
     axs[1, 0].set_ylim(ymin_t, ymax_t)
@@ -877,7 +948,10 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     
     # Fourth plot (bottom-right) with a different x-axis range
     axs[1, 1].plot(x4, y4)
-    axs[1, 1].set_title('A-weighted audio frequency domain')
+    if not LOWPASS :
+        axs[1, 1].set_title('A-weighted audio frequency domain')
+    else :
+        axs[1, 1].set_title('Lowpass audio frequency domain')
     axs[1, 1].set_xlabel("Freq. [Hz]")
     axs[1, 1].set_ylabel('PCM encoded audio [sint16]')
     axs[1, 1].set_xlim(xmin_f, xmax_f)
@@ -946,7 +1020,10 @@ class MyFrame(wx.Frame):
         self.button_checkDevices = wx.Button(panel, label="CheckDevices", pos=(200, 10))
 
         # Create a button on the panel
-        self.button_setDevices = wx.Button(panel, label="SetDevices", pos=(200, 42))
+        self.button_setDevices = wx.Button(panel, label="SetDevices", pos=(200, 40))
+        
+        # Toggle button : A-Weighting or LowPass
+        self.toggle_btn = wx.ToggleButton(panel, label="OFF", pos=(200, 80))
 
         # Create a button on the panel
         self.button_start = wx.Button(panel, label="Start Measurement!", pos=(10, 10))
@@ -962,7 +1039,6 @@ class MyFrame(wx.Frame):
 
         # Create a button on the panel
         self.button_saveWave = wx.Button(panel, label="Save and Plot Wave File [check signal]", pos=(10, 140))
-  
   
         # Create text output field
         self.status_text = wx.StaticText(panel, label="Status:", pos=(10, 180), size=(300, 50))
@@ -990,6 +1066,9 @@ class MyFrame(wx.Frame):
  
         # Bind the button click event to an event handler function
         self.button_setDevices.Bind(wx.EVT_BUTTON, self.on_button_setDevices_click)
+        
+        # Bind the button click event to an event handler function
+        self.toggle_btn.Bind(wx.EVT_TOGGLEBUTTON, self.on_button_selectFilter_click)
         
         # Bind the button click event to an event handler function
         self.button_start.Bind(wx.EVT_BUTTON, self.on_button_start_click)
@@ -1041,6 +1120,11 @@ class MyFrame(wx.Frame):
     def on_button_setDevices_click(self, event):  
         # Call function
         func_on_button_setDevices_click(self, _device_index)
+
+
+    def on_button_selectFilter_click(self, event):  
+        # Call function
+        on_button_selectFilter_click(self, _device_index)
 
 
     def on_button_start_click(self, event):
@@ -1100,6 +1184,7 @@ if __name__ == "__main__":
         
     "audio_data": np.array([]),
     "a_weighted_signal": np.array([]),
+    "lowpass_signal": np.array([]),  
     "audio_data_pcm_abs": np.array([]),
     "audio_data_mV": np.array([]),
     "audio_data_mV_calib": np.array([]),
@@ -1159,6 +1244,8 @@ if __name__ == "__main__":
 
         #Process LOCALS
         data_dictionary['audio_data']                           = np.array([])
+        data_dictionary['a_weighted_signal']                    = np.array([])
+        data_dictionary['lowpass_signal']                       = np.array([])
         data_dictionary['audio_data_pcm_abs']                   = np.array([])
         data_dictionary['audio_data_mV']                        = np.array([])
         data_dictionary['audio_data_mV_calib']                  = np.array([])
