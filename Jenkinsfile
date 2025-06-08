@@ -41,7 +41,13 @@ pipeline {
             steps {
                 echo "Running tests..."
                 // Run test commands here
-                sh 'pytest --junitxml=reports/results.xml'
+                
+                // Run windows command prompt , then call batch file
+                bat '''
+                    if not exist reports mkdir reports
+                    pytest --junitxml=reports\\results.xml
+                    dir reports
+                '''
             }
         }
 
@@ -56,8 +62,7 @@ pipeline {
     post {
         always {
             echo "Pipeline finished."
-            archiveArtifacts artifacts: 'dist/**/*.whl, dist/**/*.tar.gz', fingerprint: true
-            junit 'reports/**/*.xml'
+            junit 'reports/results.xml'
         }
         success {
             echo "Build succeeded!"
