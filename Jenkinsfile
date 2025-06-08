@@ -1,6 +1,8 @@
 pipeline {
-    // agent any  // Runs on any available Jenkins agent
+
+    // define Jenkins agent node which is specified for this jenkins job (best practice)
     agent { label 'Jenkins_Node_Python_AudioLogger' }
+    // agent any  // Runs on any available Jenkins agent
 
     environment {
         // Define environment variables if needed
