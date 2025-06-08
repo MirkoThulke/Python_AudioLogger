@@ -17,19 +17,24 @@ pipeline {
             }
         }
 
-        stage('Pepare') {
+        stage('Check Python Setup') {
             steps {
                 
                     // script {
                     //    githubNotify context: 'build', status: 'PENDING', description: 'Build is starting...'
                     // } 
                 
-                    echo "Setting up Python packages..."
                     // Add your build commands here
                     // For example: mvn clean install, npm install, etc.
                     
-                    bat 'pip install -r requirements.txt'
-                    
+                    echo "Check Python for outdated packages..."
+                    bat '''
+                        pip list --outdated > outdated_packages.txt
+                        for /f %%i in (outdated_packages.txt) do 
+                            (
+                                exit /b 1
+                            )
+                    '''
                     
                     //script {
                     //    githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
@@ -42,6 +47,7 @@ pipeline {
             steps {
                 echo "Running tests..."
                 
+                bat 
                 // Run test commands here
                 bat 'pytest tests/'
                 
