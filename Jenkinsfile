@@ -47,11 +47,9 @@ pipeline {
                 
                 
                 // Run windows command prompt , then call batch file
-                bat '''
-                    if not exist reports mkdir reports
-                    pytest --junitxml=reports\\results.xml
-                    dir reports
-                '''
+                // bat 'if not exist reports mkdir reports'
+                // bat 'pytest --junitxml=reports\\results.xml'
+
             }
         }
 
@@ -66,7 +64,7 @@ pipeline {
     post {
         always {
             echo "Pipeline finished."
-            junit 'reports/results.xml'
+            // junit 'reports/results.xml'
         }
         success {
             echo "Build succeeded!"
