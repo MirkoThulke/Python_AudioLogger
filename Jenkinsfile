@@ -11,6 +11,7 @@ pipeline {
 
 
     stages {
+        
         stage('Checkout') {
             steps {
                 // Pulls code from your GitHub repository
@@ -19,28 +20,29 @@ pipeline {
         }
 
 
-    stage('Check Python Packages') {
-       steps {
-           script {
-               catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                   bat '''
-                       pip list --outdated --format=json > outdated_packages.json
-    
-                       for /f %%i in ('find /c /v "" ^< outdated_packages.json') do set COUNT=%%i
-    
-                       if %COUNT% GTR 2 (
-                           echo WARNING: Outdated Python packages found.
-                           type outdated_packages.json
-                           exit /b 1
-                       ) else (
-                           echo All Python packages are up to date.
-                           exit /b 0
-                       )
-                   '''
+        stage('Check Python Packages') {
+           steps {
+               script {
+                   catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                       bat '''
+                           pip list --outdated --format=json > outdated_packages.json
+        
+                           for /f %%i in ('find /c /v "" ^< outdated_packages.json') do set COUNT=%%i
+        
+                           if %COUNT% GTR 2 (
+                               echo WARNING: Outdated Python packages found.
+                               type outdated_packages.json
+                               exit /b 1
+                           ) else (
+                               echo All Python packages are up to date.
+                               exit /b 0
+                           )
+                       '''
+                   }
                }
            }
-       }
-    
+        }
+
 
         stage('Test') {
             steps {
@@ -58,12 +60,14 @@ pipeline {
             }
         }
 
+
         stage('Deploy') {
             steps {
                 echo "Deploying the application..."
                 // Deploy logic goes here (e.g., copy files, Docker deploy, etc.)
             }
         }
+        
     }
 
     post {
