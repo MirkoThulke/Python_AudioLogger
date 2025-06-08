@@ -436,12 +436,15 @@ def func_process_audio_input(data_dictionary, frames, system_calibration_factor_
         # Convert the audio data to a numpy array
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
+        # next change : ....
+        # the filtered data must be apppended after the func_calc_SPL call ...
         #for output wave file creation, add to a list
         frames.append(data)
         #print(f"data : {data}\n")
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary, system_calibration_factor_94db)
+        
         
         #chunk counter
         chunk_index_i.value = chunk_index_i.value+1
