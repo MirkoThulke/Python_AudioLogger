@@ -1,6 +1,6 @@
 pipeline {
     // agent any  // Runs on any available Jenkins agent
-    agent { label 'Jenkins_Agent_Python_AudioLogger' }
+    agent { label 'Jenkins_Node_Python_AudioLogger' }
 
     environment {
         // Define environment variables if needed
