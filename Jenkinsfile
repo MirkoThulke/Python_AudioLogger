@@ -16,9 +16,20 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo "Building the project..."
-                // Add your build commands here
-                // For example: mvn clean install, npm install, etc.
+                
+                    script {
+                        githubNotify context: 'build', status: 'PENDING', description: 'Build is starting...'
+                    }
+                
+                    echo "Building the project..."
+                    // Add your build commands here
+                    // For example: mvn clean install, npm install, etc.
+                    sleep 2 // simulate build
+                    
+                    script {
+                        githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
+                    }
+                
             }
         }
 
