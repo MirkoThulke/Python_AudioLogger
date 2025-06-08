@@ -25,15 +25,21 @@ pipeline {
                script {
                    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                        bat '''
-                           pip list --outdated --format=json > outdated_packages.json
+                            pip list --outdated --format=json > outdated_packages.json
         
-                           for /f %%i in ('find /c /v "" ^< outdated_packages.json') do set COUNT=%%i
+                            setlocal enabledelayedexpansion
+                            set COUNT=0
+                            for /f "usebackq" %%A in (`findstr /R /N "^" outdated_packages.json`) do 
+                            (
+                            set /a COUNT+=1
+                            )
+                            echo Total lines: !COUNT!
         
-                           if %COUNT% GTR 2 (
+                            if %COUNT% GTR 2 (
                                echo WARNING: Outdated Python packages found.
                                type outdated_packages.json
                                exit /b 1
-                           ) else (
+                            ) else (
                                echo All Python packages are up to date.
                                exit /b 0
                            )
@@ -73,6 +79,7 @@ pipeline {
     post {
         always {
             echo "Pipeline finished."
+            archiveArtifacts artifacts: 'outdated_packages.json', onlyIfSuccessful: false
             // junit 'reports/results.xml'
         }
         success {
