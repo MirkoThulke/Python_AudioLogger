@@ -17,22 +17,23 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Pepare') {
             steps {
                 
-                    script {
-                        githubNotify context: 'build', status: 'PENDING', description: 'Build is starting...'
-                    }
+                    // script {
+                    //    githubNotify context: 'build', status: 'PENDING', description: 'Build is starting...'
+                    // } 
                 
-                    echo "Building the project..."
+                    echo "Setting up Python packages..."
                     // Add your build commands here
                     // For example: mvn clean install, npm install, etc.
                     
-                    bat 'python setup.py build'
+                    bat 'pip install -r requirements.txt'
                     
-                    script {
-                        githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
-                    }
+                    
+                    //script {
+                    //    githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
+                    //}
                 
             }
         }
@@ -40,7 +41,10 @@ pipeline {
         stage('Test') {
             steps {
                 echo "Running tests..."
+                
                 // Run test commands here
+                bat 'pytest tests/'
+                
                 
                 // Run windows command prompt , then call batch file
                 bat '''
