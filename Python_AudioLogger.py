@@ -273,13 +273,15 @@ def func_on_button_setDevices_click(frame, _device_index):
     #close_audio_stream(p, _)
 
 
-def on_button_selectFilter_click(self, event):
-    if self.toggle_btn.GetValue():
-            self.toggle_btn.SetLabel("ON")
-            self.status_label.SetLabel("Current state: ON")
+def func_on_button_selectFilter_click(self, event, is_lowpass):
+    if self.filter_toggle_btn.GetValue():
+            self.filter_toggle_btn.SetLabel("LowPass")
+            is_lowpass.value = True
+
     else:
-            self.toggle_btn.SetLabel("OFF")
-            self.status_label.SetLabel("Current state: OFF")
+            self.filter_toggle_btn.SetLabel("dBA")
+            is_lowpass.value = False
+
 
 
 def apply_a_weighting(data_dictionary):
@@ -1023,7 +1025,7 @@ class MyFrame(wx.Frame):
         self.button_setDevices = wx.Button(panel, label="SetDevices", pos=(200, 40))
         
         # Toggle button : A-Weighting or LowPass
-        self.toggle_btn = wx.ToggleButton(panel, label="OFF", pos=(200, 80))
+        self.filter_toggle_btn = wx.ToggleButton(panel, label="dBA", pos=(200, 80), size=(60, 40))
 
         # Create a button on the panel
         self.button_start = wx.Button(panel, label="Start Measurement!", pos=(10, 10))
@@ -1068,7 +1070,7 @@ class MyFrame(wx.Frame):
         self.button_setDevices.Bind(wx.EVT_BUTTON, self.on_button_setDevices_click)
         
         # Bind the button click event to an event handler function
-        self.toggle_btn.Bind(wx.EVT_TOGGLEBUTTON, self.on_button_selectFilter_click)
+        self.filter_toggle_btn.Bind(wx.EVT_TOGGLEBUTTON, self.on_button_selectFilter_click)
         
         # Bind the button click event to an event handler function
         self.button_start.Bind(wx.EVT_BUTTON, self.on_button_start_click)
@@ -1124,7 +1126,7 @@ class MyFrame(wx.Frame):
 
     def on_button_selectFilter_click(self, event):  
         # Call function
-        on_button_selectFilter_click(self, _device_index)
+        func_on_button_selectFilter_click(self, _device_index, is_lowpass)
 
 
     def on_button_start_click(self, event):
@@ -1203,7 +1205,7 @@ if __name__ == "__main__":
     ################################################
     #SHARED MEMORY
     
-    # global variables a single shared memory allocation
+    # global variables in the single shared memory allocation
     _device_index                   = manager.Value('i', 0)  # Shared integer
     is_recording                    = manager.Value(ctypes.c_bool, False)  # Shared boolean
     is_logging                      = manager.Value(ctypes.c_bool, False)  # Shared boolean
@@ -1212,7 +1214,7 @@ if __name__ == "__main__":
     chunk_index_i                   = manager.Value('i', 0)  # Shared integer
     chunk_noise_list_index          = manager.list() # Manager-backed shared list
     chunk_noise_list_spl            = manager.list() # Manager-backed shared list
-    
+    is_lowpass                      = manager.Value(ctypes.c_bool, False)  # Shared boolean 
     ################################################
   
     app = MyApp()
@@ -1264,6 +1266,7 @@ if __name__ == "__main__":
         chunk_noise_list_spl[:]                                 = []
         is_recording.value                                      = False
         is_logging.value                                        = False
+        is_lowpass.value                                        = False
         
         # Terminate running process, in case they are not closed already.
         #if recording_process.is_alive() :
