@@ -47,7 +47,7 @@ pipeline {
             steps {
                 echo "Running tests..."
                 
-                bat 
+
                 // Run test commands here
                 bat 'pytest tests/'
                 
