@@ -9,6 +9,7 @@ pipeline {
         EXAMPLE_VAR = "Hello, Jenkins!"
     }
 
+
     stages {
         stage('Checkout') {
             steps {
@@ -17,25 +18,29 @@ pipeline {
             }
         }
 
-        stage('Check Python Setup') {
-            steps {
-                
-                    // script {
-                    //    githubNotify context: 'build', status: 'PENDING', description: 'Build is starting...'
-                    // } 
-                
-                    // Add your build commands here
-                    // For example: mvn clean install, npm install, etc.
-                    
-                    echo "Check Python for outdated packages..."
-                    bat 'pip list --outdated > outdated_packages.txt'
-                    
-                    //script {
-                    //    githubNotify context: 'build', status: 'SUCCESS', description: 'Build passed!'
-                    //}
-                
-            }
-        }
+
+    stage('Check Python Packages') {
+       steps {
+           script {
+               catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                   bat '''
+                       pip list --outdated --format=json > outdated_packages.json
+    
+                       for /f %%i in ('find /c /v "" ^< outdated_packages.json') do set COUNT=%%i
+    
+                       if %COUNT% GTR 2 (
+                           echo WARNING: Outdated Python packages found.
+                           type outdated_packages.json
+                           exit /b 1
+                       ) else (
+                           echo All Python packages are up to date.
+                           exit /b 0
+                       )
+                   '''
+               }
+           }
+       }
+    
 
         stage('Test') {
             steps {
