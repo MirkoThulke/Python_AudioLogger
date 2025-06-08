@@ -41,6 +41,7 @@ pipeline {
             steps {
                 echo "Running tests..."
                 // Run test commands here
+                sh 'pytest --junitxml=reports/results.xml'
             }
         }
 
