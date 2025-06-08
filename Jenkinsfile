@@ -54,7 +54,13 @@ pipeline {
 
     post {
         always {
+            
             echo "Pipeline finished."
+
+            archiveArtifacts artifacts: 'dist/**/*.whl, dist/**/*.tar.gz', fingerprint: true
+            junit 'reports/**/*.xml'
+        
+                }
         }
         success {
             echo "Build succeeded!"
