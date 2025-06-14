@@ -20,33 +20,25 @@ pipeline {
         }
 
 
-        stage('Check Python Packages') {
-           steps {
-               script {
-                   catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                       bat '''
-                            pip list --outdated --format=json > outdated_packages.json
-        
-                            setlocal enabledelayedexpansion
-                            set COUNT=0
-                            for /f "usebackq" %%A in (`findstr /R /N "^" outdated_packages.json`) do 
-                            (
-                            set /a COUNT+=1
-                            )
-                            echo Total lines: !COUNT!
-        
-                            if %COUNT% GTR 2 (
-                               echo WARNING: Outdated Python packages found.
-                               type outdated_packages.json
-                               exit /b 1
-                            ) else (
-                               echo All Python packages are up to date.
-                               exit /b 0
-                           )
-                       '''
-                   }
-               }
-           }
+        stage('Check Outdated Packages') {
+            steps {
+                script {
+                    def result = sh(script: '''
+                        pip list --outdated --format=json > outdated_packages.json
+                        python3 -c "
+                        import json
+                        with open('outdated_packages.json') as f:
+                        data = json.load(f)
+                        print(len(data))"''', returnStdout: true).trim()
+
+                    if (result != "0") {
+                        echo "⚠️ Found ${result} outdated packages."
+                        currentBuild.result = 'UNSTABLE'  // mark as UNSTABLE
+                    } else {
+                        echo "✅ All packages are up to date."
+                    }
+                }
+            }
         }
 
 
@@ -75,6 +67,7 @@ pipeline {
         }
         
     }
+
 
     post {
         always {
