@@ -52,11 +52,9 @@ import wave
 import matplotlib.pyplot as plt
 import configparser
 import multiprocessing
-from multiprocessing import Manager, Value, Array
 import threading
 import subprocess
 import os
-import errno
 import sys
 import psutil
 import time
@@ -64,7 +62,7 @@ import datetime
 from viztracer import VizTracer # visual thread debugging
 
 
-LOWPASS = 1
+
 
 '''
 DEBUG == 0 # Default 
@@ -124,7 +122,7 @@ SPL_MAX_NIGH_DBA    = 35
 
 # Set parameters for audio outut
 RECORD_SECONDS = 4        # Duration of the recording in seconds
-OUTPUT_FILENAME = "output.wav"  # Output WAV file
+OUTPUT_FILENAME = "output"  # Output WAV file
 OUTPUT_NOISE_FILENAME = "Bruit" #Output filename prefix for logged noise events
 OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
@@ -329,7 +327,7 @@ def apply_low_pass(data_dictionary):
     return ( int_array )
 
 
-def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
+def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
  
 
     # reset output arrays :
@@ -349,13 +347,13 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
     # Apply A-weighting to the signal
     # A-weighting does not have an impcat on microphone calibration at 1000Hz, because weighting is 1 at 1000Hz. 
     # Convert to float for A-weighting processing ( scipy.signal requires type 'signal', thus float32)
-    if not LOWPASS :
+    if not is_lowpass.value :
         data_dictionary['a_weighted_signal'] = apply_a_weighting(data_dictionary)
     else :
         data_dictionary['lowpass_signal'] = apply_low_pass(data_dictionary)
         
     # Check  the maximum absolute value
-    if not LOWPASS :
+    if not is_lowpass.value :
         audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['a_weighted_signal']))
     else :
         audio_data_max_pcm_value_new = np.max(np.abs(data_dictionary['lowpass_signal'])) 
@@ -366,7 +364,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
 
  
     # Absolute values first
-    if not LOWPASS :    
+    if not is_lowpass.value :    
         data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['a_weighted_signal'])
     else :
         data_dictionary['audio_data_pcm_abs'] = np.abs(data_dictionary['lowpass_signal'])
@@ -405,7 +403,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db):
         print(f"audio_data_pressurePa_spl < 5 dbA']: No Audio input. Check Input Device ID and run calibration !")
 
 
-def func_process_audio_input(data_dictionary, frames, system_calibration_factor_94db, _device_index, chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, recording_status_queue, recording_dba_queue):
+def func_process_audio_input(data_dictionary, frames, frames_filtered, system_calibration_factor_94db, _device_index, chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, recording_status_queue, recording_dba_queue, is_lowpass):
 
  
     #whole process will run in high priority mode
@@ -426,6 +424,7 @@ def func_process_audio_input(data_dictionary, frames, system_calibration_factor_
     chunk_noise_list_index[:] = []
     chunk_noise_list_spl[:] = []
     frames[:] = [] # use clear, since it is a DataDictionary shared list.
+    frames_filtered[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
     
     print(f"is_recording: {is_recording.value}\n")
@@ -433,18 +432,22 @@ def func_process_audio_input(data_dictionary, frames, system_calibration_factor_
         # Read a chunk of audio data
         data = stream_loc.read(CHUNK)
       
+        # copy chunk in the audio output for wave file processing
+        frames.append(np.frombuffer(data, dtype=np.int16)) # convert to numpy int16 array
+      
         # Convert the audio data to a numpy array
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
-        # next change : ....
-        # the filtered data must be apppended after the func_calc_SPL call ...
-        #for output wave file creation, add to a list
-        frames.append(data)
-        #print(f"data : {data}\n")
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL(data_dictionary, system_calibration_factor_94db)
+        func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass )
         
+        # copy chunk in the audio output for wave file processing     
+        if not is_lowpass.value :
+            frames_filtered.append(data_dictionary['a_weighted_signal'])
+        else :
+            frames_filtered.append(data_dictionary['lowpass_signal'])
+
         
         #chunk counter
         chunk_index_i.value = chunk_index_i.value+1
@@ -489,11 +492,12 @@ def func_run_calibration(data_dictionary, frames, _device_index , system_calibra
         # Read a chunk of audio data
         data = stream.read(CHUNK)
       
+        #for output wave file creation, add to a list
+        frames.append(np.frombuffer(data, dtype=np.int16))
+      
         # Convert the audio data to a numpy array
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
-        #for output wave file creation, add to a list
-        frames.append(data)
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary, system_calibration_factor_94db)
@@ -550,12 +554,12 @@ def func_check_calibration(data_dictionary, frames, _device_index):
         # Read a chunk of audio data
         data = stream.read(CHUNK)
         
+        #for output wave file creation, add to a list
+        frames.append(np.frombuffer(data, dtype=np.int16))
+        
         # Convert the audio data to a numpy array
         data_dictionary['audio_data']   = np.frombuffer(data, dtype=np.int16)
         
-        #for output wave file creation, add to a list
-        frames.append(data)
-
         
         # Calculate PCM to SPl ! 
         func_calc_SPL(data_dictionary, system_calibration_factor_94db)
@@ -608,7 +612,7 @@ def func_on_button_start_click(frame, data_dictionary, frames, is_recording, is_
             try:
                 print("Creating and starting recording process...\n")
 
-                frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary, frames, system_calibration_factor_94db,_device_index,chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, frame.recording_status_queue, frame.recording_dba_queue,))
+                frame.recording_process         = multiprocessing.Process(target=func_process_audio_input, args=(data_dictionary, frames, frames_filtered, system_calibration_factor_94db,_device_index,chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, frame.recording_status_queue, frame.recording_dba_queue,is_lowpass,))
                 print("recording process created\n")
             
                 # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
@@ -644,7 +648,7 @@ def func_on_button_start_click(frame, data_dictionary, frames, is_recording, is_
             # Argument : frame. Required to create a process from inside the GUI that serves as longrunning
             # background task. And must refresh the GUI (frame instance) from inside the backround task via callAfter
            
-            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary, frames, is_logging,chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, frame.recording_status_queue,))
+            frame.logging_process = multiprocessing.Process(target=func_saveWave_on_noise_event, args=(data_dictionary, frames, frames_filtered, is_logging,chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, frame.recording_status_queue,))
             print("logging process created\n")
  
             frame.logging_process.start()
@@ -718,7 +722,7 @@ def func_on_button_exit_click(frame, _device_index, system_calibration_factor_94
     app.ExitMainLoop()
 
 
-def func_saveWave_on_noise_event(data_dictionary, frames, is_logging, chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, recording_status_queue):
+def func_saveWave_on_noise_event(data_dictionary, frames, frames_filtered, is_logging, chunk_index_i, chunk_noise_list_index,chunk_noise_list_spl, recording_status_queue):
 
 
     max_spl_in_chunk            = 0
@@ -767,7 +771,7 @@ def func_saveWave_on_noise_event(data_dictionary, frames, is_logging, chunk_inde
             print(f"start_chunk is : {start_chunk}\n")
             print(f"stop_chunk is : {stop_chunk}\n")
             
-            noise_frames = frames[start_chunk:stop_chunk]
+            noise_frames = frames_filtered[start_chunk:stop_chunk]
         
             
             # Get the current local time
@@ -816,54 +820,87 @@ def func_saveWave_on_noise_event(data_dictionary, frames, is_logging, chunk_inde
 
 
 
-def func_on_saveWave_exit_click(data_dictionary, frames):
+def func_on_saveWave_exit_click(data_dictionary, frames, frames_filtered, is_lowpass):
+
+    # Assuming 'frames' is your ListProxy object
+    frames_list = list(frames)  # Convert ListProxy to a regular list
+    print(f"frames_list: {frames_list}\n\n")
+    # Assuming 'frames' is your ListProxy object
+    frames_filtered_list = list(frames_filtered)  # Convert ListProxy to a regular list
+    print(f"frames_filtered_list: {frames_filtered_list}\n\n")
+    
+    # Convert the list to a NumPy array of 16-bit integers
+    frames_list_np = np.array(frames_list, dtype=np.int16)
+    print(f"frames_list_np: {frames_list_np}\n\n")
+    # Convert the list to a NumPy array of 16-bit integers
+    frames_filtered_list_np = np.array(frames_filtered_list, dtype=np.int16)
+    print(f"frames_filtered_list_np: {frames_filtered_list_np}\n\n")
 
     # Write the recorded data to a WAV file
-    with wave.open(OUTPUT_FILENAME, 'wb') as wf:
+    with wave.open(OUTPUT_FILENAME+'.wav', 'wb') as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(SAMPLE_SIZE)
         wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
+        wf.writeframes(b''.join(frames)) # Conversion back to raw byte wave format
         print(f"Audio saved as : {OUTPUT_FILENAME}\n\n")
 
+    # Write the recorded FILTERED data to a WAV file
+    with wave.open(OUTPUT_FILENAME+'_filtered'+'.wav', 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(SAMPLE_SIZE)
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames_filtered)) # Conversion back to raw byte wave format
+        print(f"Audio saved as : {OUTPUT_FILENAME}_filtered\n\n")
         
     # open the recorded data to a WAV file
-    with wave.open(OUTPUT_FILENAME, 'rb') as wav_file:
-        sample_rate = wav_file.getframerate()  # Sample rate (samples per second)
-        num_frames = wav_file.getnframes()
-        num_channels = wav_file.getnchannels()
-        sample_width = wav_file.getsampwidth()
+    with wave.open(OUTPUT_FILENAME+'.wav', 'rb') as wav_file:
+        sample_rate             = wav_file.getframerate()  # Sample rate (samples per second)
+        num_frames              = wav_file.getnframes()
+        num_channels            = wav_file.getnchannels()
+        sample_width            = wav_file.getsampwidth()
            
         raw_data = wav_file.readframes(num_frames)
-        print(f"Audio opened as : {OUTPUT_FILENAME}\n")
+        print(f"Audio opened as : {OUTPUT_FILENAME}.wav\n")
         print(f"num_channels : {num_channels}\n")
         print(f"sample_rate : {sample_rate}\n")
         print(f"sample_width: {sample_width}\n")
         print(f"num_frames: {num_frames}\n")
         print(f"raw_data: {raw_data}\n\n")
     
-    # read audio data and apply weighting filter    
+    # open the recorded FILTERED data to a WAV file
+    with wave.open(OUTPUT_FILENAME+'_filtered'+'.wav', 'rb') as wav_file_filtered:
+        sample_rate_filtered    = wav_file_filtered.getframerate()  # Sample rate (samples per second)
+        num_frames_filtered     = wav_file_filtered.getnframes()
+        num_channels_filtered   = wav_file_filtered.getnchannels()
+        sample_width_filtered   = wav_file_filtered.getsampwidth()
+           
+        raw_data_filtered = wav_file_filtered.readframes(num_frames_filtered)
+        print(f"Audio opened as : {OUTPUT_FILENAME}_filtered.wav\n")
+        print(f"num_channels_filtered : {num_channels_filtered}\n")
+        print(f"sample_rate_filtered : {sample_rate_filtered}\n")
+        print(f"sample_width_filtered: {sample_width_filtered}\n")
+        print(f"num_frames_filtered: {num_frames_filtered}\n")
+        print(f"raw_data_filtered: {raw_data_filtered}\n\n")
+        
+
     # Convert raw byte data into a numpy array
     # For 16-bit audio (common for WAV), use np.int16
-    data_dictionary['audio_data'] = np.frombuffer(raw_data, dtype=np.int16)
-    # A-weighted or lowpass audio data
-
-    if not LOWPASS :
-        audio_data_filtered = apply_a_weighting(data_dictionary)
-    else :
-        audio_data_filtered = apply_low_pass(data_dictionary)
+    audio_data              = np.frombuffer(raw_data, dtype=np.int16)
+    print(f"audio_data: {audio_data}\n\n")
     
+    # A-weighted or lowpass audio data
+    audio_data_filtered     = np.frombuffer(raw_data_filtered, dtype=np.int16)
+    print(f"audio_data_filtered: {audio_data_filtered}\n\n")
     
     # Create a time axis for plotting
     time = np.linspace(0, num_frames / sample_rate, num_frames)
    
    
-   
     # FFT  
     # Perform FFT on the audio signal
-    fft_signal = np.fft.fft(data_dictionary['audio_data'])
+    fft_signal              = np.fft.fft(audio_data)
     # Perform FFT on the audio signal
-    fft_signal_filtered = np.fft.fft(audio_data_filtered)
+    fft_signal_filtered     = np.fft.fft(audio_data_filtered)
 
         
     # Compute the corresponding frequencies
@@ -879,16 +916,6 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     positive_magnitude = fft_magnitude[:len(frequencies)//2]
     positive_magnitude_filtered = fft_magnitude_filtered[:len(frequencies)//2]    
  
-    '''
-    # Plot the waveform
-    plt.figure(figsize=(10, 6))
-    plt.plot(time, data_dictionary['audio_data'], color='blue')
-    plt.title('Raw audio time domain')
-    plt.xlabel("Time [s]")
-    plt.ylabel('PCM encoded audio [sint16]')
-    plt.grid(True)
-    plt.show()        
-    '''
     
     # plot frames in time domaine
     # plot process frames in time domaine
@@ -897,7 +924,7 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     
     # Create some data for plotting
     x1 = time
-    y1 = data_dictionary['audio_data']
+    y1 = audio_data
 
     x2 = time
     y2 = audio_data_filtered
@@ -935,7 +962,7 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     
     # Third plot (bottom-left)
     axs[1, 0].plot(x2, y2)
-    if not LOWPASS :
+    if not is_lowpass.value :
         axs[1, 0].set_title('A-weighted audio time domain')
     else :
         axs[1, 0].set_title('Lowpass audio time domain')   
@@ -953,7 +980,7 @@ def func_on_saveWave_exit_click(data_dictionary, frames):
     
     # Fourth plot (bottom-right) with a different x-axis range
     axs[1, 1].plot(x4, y4)
-    if not LOWPASS :
+    if not is_lowpass.value :
         axs[1, 1].set_title('A-weighted audio frequency domain')
     else :
         axs[1, 1].set_title('Lowpass audio frequency domain')
@@ -1161,7 +1188,7 @@ class MyFrame(wx.Frame):
     def on_button_saveWave_click(self, event):
         # Call function
         # need self arguments to know which class instance to close
-        func_on_saveWave_exit_click(data_dictionary, frames)
+        func_on_saveWave_exit_click(data_dictionary, frames, frames_filtered, is_lowpass)
         
     
 
@@ -1214,6 +1241,7 @@ if __name__ == "__main__":
     is_logging                      = manager.Value(ctypes.c_bool, False)  # Shared boolean
     system_calibration_factor_94db  = manager.Value('d', 1.0)  # Shared float
     frames                          = manager.list()  # Manager-backed shared list
+    frames_filtered                 = manager.list()  # Manager-backed shared list   
     chunk_index_i                   = manager.Value('i', 0)  # Shared integer
     chunk_noise_list_index          = manager.list() # Manager-backed shared list
     chunk_noise_list_spl            = manager.list() # Manager-backed shared list
@@ -1264,6 +1292,7 @@ if __name__ == "__main__":
         
         #SHARED MEMORY
         frames[:]                                               = [] #manager.list
+        frames_filtered[:]                                      = [] #manager.list
         chunk_index_i.value                                     = 0    # counter of processed chunks
         chunk_noise_list_index[:]                               = []
         chunk_noise_list_spl[:]                                 = []
