@@ -38,5 +38,6 @@ def save_outdated_packages_to_json(output_file='outdated_packages.json'):
         
         
 if __name__ == "__main__":
-	check_python_version()
+    check_python_version()
     save_outdated_packages_to_json()
+    

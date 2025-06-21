@@ -297,9 +297,9 @@ def apply_a_weighting(data_dictionary):
     int_array   = float_array_filt.astype(np.int16)
     
     #print(f'audio_data: {audio_data}')
-    #print(f'float_array: {float_array}')
-    #print(f'float_array_filt: {float_array_filt}') 
-    #print(f'int_array: {int_array}')   
+    print(f'float_array: {float_array}')
+    print(f'float_array_filt: {float_array_filt}') 
+    print(f'int_array: {int_array}')   
     
     return ( int_array )
 
@@ -308,21 +308,23 @@ def apply_low_pass(data_dictionary):
     #Chebyshev Type II low-pass filter
     global cheby2_b
     global cheby2_a
+    # print(f'cheby2_b: {cheby2_b}')
+    # print(f'cheby2_a: {cheby2_a}')
     
     # convert to float for filtering
-    int_array  = data_dictionary['audio_data'].astype(np.int16)
+    float_array  = data_dictionary['audio_data'].astype(np.float32)
     
 
     # Apply A-weighting
-    filtered_data = lfilter(cheby2_b, cheby2_a, int_array)
+    float_array_filt = lfilter(cheby2_b, cheby2_a, float_array)
     
     #convert back to integer for further processing
-    int_array   = filtered_data.astype(np.int16)
+    int_array   = float_array_filt.astype(np.int16)
     
     #print(f'audio_data: {audio_data}')
-    #print(f'float_array: {float_array}')
-    #print(f'float_array_filt: {float_array_filt}') 
-    #print(f'int_array: {int_array}')   
+    print(f'float_array: {float_array}')
+    print(f'float_array_filt: {float_array_filt}') 
+    print(f'int_array: {int_array}')   
     
     return ( int_array )
 
@@ -1192,24 +1194,22 @@ class MyFrame(wx.Frame):
         
     
 
-
 class MyApp(wx.App):
     def OnInit(self):
         self.frame = MyFrame(None, title="Task Scheduler GUI")      
         return True
 
-# Main GUI application loop ###################################
-if __name__ == "__main__":
-    
-    # required to start new process under windows systems
-    multiprocessing.set_start_method("spawn", force=True)  # optional but clear
+
+def create_shared_resource_manager():
     
     # Defined in shared memory to allow several processes to work on the data : multiprocessing."
     # arrays do not require to have a postfix.
-
-    # DataDictionary
     manager = multiprocessing.Manager()
+    return manager
 
+
+def create_process_local_common_datadictionary_definition(manager):
+   
     # PROCESS LOCAL COPIES ########################    
     # variables with process local copies   
     data_dictionary = manager.dict({
@@ -1222,7 +1222,7 @@ if __name__ == "__main__":
     "audio_data_mV_calib": np.array([]),
     "audio_data_pressurePa": np.array([]),
     "audio_data_pressurePa_square": np.array([]),
-
+    
     "audio_data_pressurePa_squareMean": 0.0,
     "audio_data_pressurePa_rms": 0.0,
     "audio_data_pressurePa_rms_calib": 0.0,
@@ -1230,7 +1230,64 @@ if __name__ == "__main__":
     "audio_data_max_pcm_value": 0.0
     
      })
+    return data_dictionary
     ################################################
+
+
+def create_shared_memory_resources(manager):
+    ################################################
+    #SHARED MEMORY
+    # global variables in the single shared memory allocation
+    _device_index                   = manager.Value('i', 0)  # Shared integer
+    is_recording                    = manager.Value(ctypes.c_bool, False)  # Shared boolean
+    is_logging                      = manager.Value(ctypes.c_bool, False)  # Shared boolean
+    system_calibration_factor_94db  = manager.Value('d', 1.0)  # Shared float
+    frames                          = manager.list()  # Manager-backed shared list
+    frames_filtered                 = manager.list()  # Manager-backed shared list   
+    chunk_index_i                   = manager.Value('i', 0)  # Shared integer
+    chunk_noise_list_index          = manager.list() # Manager-backed shared list
+    chunk_noise_list_spl            = manager.list() # Manager-backed shared list
+    is_lowpass                      = manager.Value(ctypes.c_bool, False)  # Shared boolean 
+
+    return (
+    _device_index,
+    chunk_index_i,
+    is_recording,
+    is_logging,
+    is_lowpass,
+    system_calibration_factor_94db,
+    frames,
+    frames_filtered,
+    chunk_noise_list_index,
+    chunk_noise_list_spl
+    )
+    ################################################
+    
+    
+    
+# Main GUI application loop ###################################
+if __name__ == "__main__":
+    
+    # required to start new process under windows systems
+    multiprocessing.set_start_method("spawn", force=True)  # optional but clear
+    
+    
+    manager         = create_shared_resource_manager()
+    
+    data_dictionary = create_process_local_common_datadictionary_definition(manager)
+       
+    (
+        _device_index,
+        chunk_index_i,
+        is_recording,
+        is_logging,
+        is_lowpass,
+        system_calibration_factor_94db,
+        frames,
+        frames_filtered,
+        chunk_noise_list_index,
+        chunk_noise_list_spl
+    ) = create_shared_memory_resources(manager)
        
     ################################################
     #SHARED MEMORY
@@ -1247,9 +1304,12 @@ if __name__ == "__main__":
     chunk_noise_list_spl            = manager.list() # Manager-backed shared list
     is_lowpass                      = manager.Value(ctypes.c_bool, False)  # Shared boolean 
     ################################################
-  
-    app = MyApp()
 
+
+    
+    
+    app = MyApp()
+    
     # Wrap the main event loop in a try-except block
     try:
 
@@ -1312,6 +1372,8 @@ if __name__ == "__main__":
         #   app.logging.join()
     
         print("Application has finished.")
+
+
 
 # visual thead debugging
 if DEBUG == 1:
