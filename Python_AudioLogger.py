@@ -128,18 +128,18 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 
 # Constants for the Chebyshev Type II filter 
-CUTOFF = 400        # Cutoff frequency in Hz
+CUTOFF = 600        # Cutoff frequency in Hz : the frequency where the attentuation is achieved / guarantied
 ORDER = 6           # Filter order
-STOPBAND_ATTEN = 80 # Stopband attenuation in dB
+STOPBAND_ATTEN = 80 # Stopband attenuation in dB : Reduction inside the stopband
 # Design Chebyshev Type II low-pass filter
 nyquist = RATE / 2
 normal_cutoff = CUTOFF / nyquist
 cheby2_b, cheby2_a = cheby2(ORDER, STOPBAND_ATTEN, normal_cutoff, btype='low', analog=False)
 
 
-print(f"cheby2_b : {cheby2_b}")
-print(f"cheby2_a : {cheby2_a}")
-print(f"normal_cutoff : {normal_cutoff}")
+#print(f"cheby2_b : {cheby2_b}")
+#print(f"cheby2_a : {cheby2_a}")
+#print(f"normal_cutoff : {normal_cutoff}")
 
 
 # Global Variables NOT in shared memory #######################################
@@ -297,9 +297,9 @@ def apply_a_weighting(data_dictionary):
     int_array   = float_array_filt.astype(np.int16)
     
     #print(f'audio_data: {audio_data}')
-    print(f'float_array: {float_array}')
-    print(f'float_array_filt: {float_array_filt}') 
-    print(f'int_array: {int_array}')   
+    #print(f'float_array: {float_array}')
+    #print(f'float_array_filt: {float_array_filt}') 
+    #print(f'int_array: {int_array}')   
     
     return ( int_array )
 
@@ -322,9 +322,9 @@ def apply_low_pass(data_dictionary):
     int_array   = float_array_filt.astype(np.int16)
     
     #print(f'audio_data: {audio_data}')
-    print(f'float_array: {float_array}')
-    print(f'float_array_filt: {float_array_filt}') 
-    print(f'int_array: {int_array}')   
+    #print(f'float_array: {float_array}')
+    #print(f'float_array_filt: {float_array_filt}') 
+    #print(f'int_array: {int_array}')   
     
     return ( int_array )
 
