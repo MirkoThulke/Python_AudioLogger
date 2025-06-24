@@ -129,7 +129,7 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 # Constants for the Chebyshev Type II filter 
 CUTOFF = 200        # Cutoff frequency in Hz : the frequency where the attentuation is achieved / guarantied
-ORDER = 8           # Filter order
+ORDER = 16           # Filter order
 STOPBAND_ATTEN = 80 # Stopband attenuation in dB : Reduction inside the stopband
 # Design Chebyshev Type II low-pass filter
 nyquist = RATE / 2

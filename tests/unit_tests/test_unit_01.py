@@ -33,7 +33,7 @@ def generate_sine_wave_bytes(frequency=1000, sample_rate=48000, duration=1.0, am
     samples_int16 = np.int16(samples * 32767)
 
     # Return as raw bytes
-    return samples_int16
+    return samples_int16, t
 
 
 def signal_energy(signal):
@@ -44,7 +44,6 @@ def signal_energy(signal):
 
 
 def signal_rms(signal):
-    
     signal = signal.astype(np.float64)
     rms = np.sqrt(np.mean(signal**2))
     return rms
@@ -134,8 +133,8 @@ class UnitTest_LowPass(unittest.TestCase):
         result_gain_1000hz  = False
         
 
-        self.sinus_100hz_s16 = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
-        self.sinus_1000hz_s16 = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
+        self.sinus_100hz_s16,time = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
+        self.sinus_1000hz_s16,time = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -180,61 +179,90 @@ class UnitTest_LowPass(unittest.TestCase):
         result = False
         FREQUENCY = 100
         
-        self.sinus_100hz_s16 = generate_sine_wave_bytes(frequency=FREQUENCY, duration=2, amplitude=1.0)
+        self.sinus_100hz_s16, time = generate_sine_wave_bytes(frequency=FREQUENCY, duration=2, amplitude=1.0)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
         
         lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
         
-        energy           =  signal_energy(self.sinus_100hz_s16)
-        energy_filtered  =  signal_energy(lowpass_array_100hz)
-        
-        
+
+               
         # Perform FFT on the audio signal
         fft_signal              = np.fft.fft(self.sinus_100hz_s16)
         fft_signal_filtered     = np.fft.fft(lowpass_array_100hz)
         
+        # Calculate energy of the audio signal
+        energy           =  signal_energy(self.sinus_100hz_s16)
+        energy_filtered  =  signal_energy(lowpass_array_100hz)
+        
         # Compute the corresponding frequencies
         frequencies = np.fft.fftfreq(len(fft_signal), d=1/RATE)
         frequencies_pos = frequencies > 0
-        
+        # Find index of Cutoff frequency
+        index = np.argmin(np.abs(frequencies - FREQUENCY))
+        print(f"frequencies[index]: {frequencies[index]}")
 
 
         # Get the magnitude of the FFT and normalise to max value 
         fft_magnitude                   = np.abs(fft_signal)
-        fft_psd                         = power_spectral_sensity_psd(fft_magnitude, len(self.sinus_100hz_s16), frequencies_pos, frequencies )
-
         fft_magnitude_filtered          = np.abs(fft_signal_filtered)
+        
+        fft_magnitude_noise             = fft_magnitude_filtered
+        fft_magnitude_noise[index - 1 : index + 2] = 0.0
+        
+        fft_psd                         = power_spectral_sensity_psd(fft_magnitude, len(self.sinus_100hz_s16), frequencies_pos, frequencies )
         fft_psd_filtered                = power_spectral_sensity_psd(fft_magnitude_filtered, len(self.sinus_100hz_s16), frequencies_pos, frequencies )
 
-
-        
-        plt.figure()
-        plt.semilogx(frequencies[frequencies_pos], fft_psd_filtered[frequencies_pos])
-        
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('power_spectral_sensity')
-        plt.legend()
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.savefig("power_spectral_sensity.png", dpi=300)
-        
-        
-
-        denominator = energy_filtered - energy
-        
-        if denominator <= 0 :
-            print("⚠️ Invalid SNA calculation: denominator <= 0")
-            SNA_dB = -np.inf  # or set to None or NaN
-        else :
-            SNA_dB = 10 * np.log10(energy / (energy_filtered - energy))
-            
+        energy              =  signal_energy(fft_magnitude)
+        energy_filtered     =  signal_energy(fft_magnitude_filtered)
+        energy_noise        =  signal_energy(fft_magnitude_noise)
         print(f"energy: {energy}")
         print(f"energy_filtered: {energy_filtered}")
+        print(f"energy_noise: {energy_noise}")
+
+
+        SNA = np.sqrt(energy / (energy_noise + 1e-12))  # avoid divide-by-zero
+        SNA_dB = 20 * np.log10(SNA)
         print(f"SNA_dB: {SNA_dB}")
         
+        
+        
+        plt.figure()
+        plt.plot(time[:2000], self.sinus_100hz_s16[:2000])
+        plt.xlabel('time')
+        plt.ylabel('self.sinus_100hz_s16')
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus_100hz_s16.png", dpi=600)
+        
+            
+        plt.figure()
+        plt.loglog(frequencies[frequencies_pos], fft_magnitude[frequencies_pos])
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('fft_magnitude')
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.savefig("fft_magnitude.png", dpi=300)
+        
+        
+        
+        plt.figure()
+        plt.loglog(frequencies[frequencies_pos], fft_magnitude_filtered[frequencies_pos])
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('fft_magnitude_filtered ')
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.savefig("fft_magnitude_filtered .png", dpi=300)     
+
+
+        plt.figure()
+        plt.loglog(frequencies[frequencies_pos], fft_magnitude_noise[frequencies_pos])
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('fft_magnitude_noise')
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.savefig("fft_magnitude_noise.png", dpi=300)
+
+
+
         if SNA_dB > 30 :
             result = True
-        
         
         self.assertTrue(result, "Expected result to be True")
     
