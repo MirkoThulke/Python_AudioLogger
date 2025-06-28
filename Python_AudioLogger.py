@@ -45,7 +45,7 @@ cmd> pip list --outdated
 import wx # click button GUI
 import pyaudio
 from endolith_weighting_filters import A_weight
-from scipy.signal import cheby2, sosfilt
+from scipy.signal import cheby2, sosfiltfilt
 import numpy as np
 import ctypes
 import wave
@@ -129,7 +129,7 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 # Constants for the Chebyshev Type II filter 
 CUTOFF = 200        # Cutoff frequency in Hz : the frequency where the attentuation is achieved / guarantied
-ORDER = 16           # Filter order
+ORDER = 8           # Filter order
 STOPBAND_ATTEN = 80 # Stopband attenuation in dB : Reduction inside the stopband
 # Design Chebyshev Type II low-pass filter
 nyquist = RATE / 2
@@ -312,7 +312,7 @@ def apply_low_pass(data_dictionary):
     
 
     # Apply A-weighting
-    float_array_filt = sosfilt(sos, float_array)
+    float_array_filt = sosfiltfilt(sos, float_array)
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)

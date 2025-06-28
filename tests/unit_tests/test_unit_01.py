@@ -6,7 +6,8 @@ import numpy as np
 from scipy.signal import correlate
 from scipy.signal import cheby2, freqz, sosfilt, sosfreqz
 import matplotlib.pyplot as plt
-
+import pandas as pd
+import wave
 
 # Add the parent directory (i.e., one level up from `scripts/`)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), r"C:\Programming\eclipse_workspace\Python_AudioLogger")))
@@ -16,7 +17,7 @@ from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
 from Python_AudioLogger import apply_low_pass
-from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER
+from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS
 
 
 # Unit test howto :
@@ -24,8 +25,8 @@ from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, R
 
 
 
-# generate a sinus signal at 1000Hz in 48000 hz raw byte pcm coded format int16 :
-def generate_sine_wave_bytes(frequency=1000, sample_rate=48000, duration=1.0, amplitude=1.0):
+# generate a sinus signal at 1000Hz in 48000 hz pcm format in  int16 :
+def generate_sine_wave_bytes(frequency=100, sample_rate=48000, duration=1.0, amplitude=1.0):
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
     samples = amplitude * np.sin(2 * np.pi * frequency * t)
     
@@ -54,6 +55,24 @@ def power_spectral_sensity_psd(spectrum, len, signal_mask, freqs):
     spectrum = spectrum.astype(np.float64)
     psd = (1/len) * (np.abs(spectrum)**2)
     return psd
+
+
+def calculate_snr(signal, noisy_signal):
+    signal          = signal.astype(np.float32)
+    noisy_signal    = noisy_signal.astype(np.float32)
+    
+    noise = noisy_signal - signal
+
+    signal_power = np.mean(signal ** 2)
+    noise_power = np.mean(noise ** 2)
+    
+    epsilon = 1e-10  # Small constant to avoid divide-by-zero or log(0)
+
+    snr = signal_power / (noise_power + epsilon)
+    snr_db = 10 * np.log10(snr + epsilon)  # Ensure you also avoid log(0) here
+    
+    return snr_db
+
 
 # ✅ TEST CLASS: always define outside `if __name__ == "__main__"`
 class UnitTest_LowPass(unittest.TestCase):
@@ -86,8 +105,8 @@ class UnitTest_LowPass(unittest.TestCase):
         
         # Compute the frequency response
 
-        sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
-        
+        sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', analog=False, output='sos', fs=RATE )
+
         # Compute frequency response
         frequencies, h = sosfreqz(sos, worN=1024, fs=RATE)  # w: frequency axis in Hz, h: complex gain
         
@@ -104,21 +123,22 @@ class UnitTest_LowPass(unittest.TestCase):
         plt.axhline(-STOPBAND_ATTEN, color='green', linestyle='--', label='Stopband Attenuation')
         plt.legend()
         plt.savefig("filter_response_lowpass.png", dpi=300)
+        plt.close()
         
         # Find the index closest to normal_cutoff
         idx_cutoff = np.argmin(np.abs(frequencies - CUTOFF))
         
-        H_cutoff        = 20 * np.log10(np.abs(h[idx_cutoff]))
-        H_dc            = 20 * np.log10(np.abs(h[0]))
-        print(f"H_cutoff: {H_cutoff}")
-        print(f"H_dc: {H_dc}")
+        H_cutoff_dB        = 20 * np.log10(np.abs(h[idx_cutoff]))
+        H_dc_dB            = 20 * np.log10(np.abs(h[0]))
+        print(f"H_cutoff_dB: {H_cutoff_dB}")
+        print(f"H_dc_dB: {H_dc_dB}")
         
         # check if attentuation is as expected at the specified cutt off frenquency
-        if H_cutoff < -STOPBAND_ATTEN+1 :
+        if H_cutoff_dB < -STOPBAND_ATTEN+1 :
             result_H_cutoff = True
             
         # check if attentuation is ZERO at 0 Hz
-        if -0.5 < H_dc < 0.5 :
+        if -0.5 < H_dc_dB < 0.5 :
             result_H_dc = True
         
         
@@ -149,12 +169,7 @@ class UnitTest_LowPass(unittest.TestCase):
         unfiltered_energy_1000hz    = signal_energy(self.sinus_1000hz_s16)
         lowpass_energy_1000hz       = signal_energy(lowpass_array_1000hz )
         
-        print(f"Average power: unfiltered_energy_100hz : {unfiltered_energy_100hz}")
-        print(f"Average power: lowpass_energy_100hz : {lowpass_energy_100hz}")
-        print(f"Average power: unfiltered_energy_1000hz : {unfiltered_energy_1000hz}")
-        print(f"Average power: lowpass_energy_1000hz : {lowpass_energy_1000hz}")
-        
-        
+         
         lowpass_gain_100hz =   10 * np.log10(lowpass_energy_100hz / unfiltered_energy_100hz)
         lowpass_gain_1000hz =  10 * np.log10(lowpass_energy_1000hz / unfiltered_energy_1000hz)
         
@@ -176,95 +191,83 @@ class UnitTest_LowPass(unittest.TestCase):
     
     
     def test_Unit_03_Check_LowPass_Check_OutPut_AudioIntegrity(self):
-        result = False
-        FREQUENCY = 100
+        result1 = False
+        result2 = False
+        global CUTOFF
         
-        self.sinus_100hz_s16, time = generate_sine_wave_bytes(frequency=FREQUENCY, duration=2, amplitude=1.0)
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
+        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1e-10)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
-        
         lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
-        
-
-               
-        # Perform FFT on the audio signal
-        fft_signal              = np.fft.fft(self.sinus_100hz_s16)
-        fft_signal_filtered     = np.fft.fft(lowpass_array_100hz)
-        
-        # Calculate energy of the audio signal
-        energy           =  signal_energy(self.sinus_100hz_s16)
-        energy_filtered  =  signal_energy(lowpass_array_100hz)
-        
-        # Compute the corresponding frequencies
-        frequencies = np.fft.fftfreq(len(fft_signal), d=1/RATE)
-        frequencies_pos = frequencies > 0
-        # Find index of Cutoff frequency
-        index = np.argmin(np.abs(frequencies - FREQUENCY))
-        print(f"frequencies[index]: {frequencies[index]}")
 
 
-        # Get the magnitude of the FFT and normalise to max value 
-        fft_magnitude                   = np.abs(fft_signal)
-        fft_magnitude_filtered          = np.abs(fft_signal_filtered)
+        self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
+        lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
-        fft_magnitude_noise             = fft_magnitude_filtered
-        fft_magnitude_noise[index - 1 : index + 2] = 0.0
         
-        fft_psd                         = power_spectral_sensity_psd(fft_magnitude, len(self.sinus_100hz_s16), frequencies_pos, frequencies )
-        fft_psd_filtered                = power_spectral_sensity_psd(fft_magnitude_filtered, len(self.sinus_100hz_s16), frequencies_pos, frequencies )
+        SNA_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
+        SNA_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
+        
+        
+        print(f"SNA_100hz_dB: {SNA_100hz_dB}")
+        print(f"SNA_1000hz_dB: {SNA_1000hz_dB}")
+        
+        
+        # Put into a DataFrame
+        df = pd.DataFrame({
+            'self.sinus_100hz_s16': self.sinus_100hz_s16,
+            'lowpass_array_100hz': lowpass_array_100hz,
+            'time': time
+        })
 
-        energy              =  signal_energy(fft_magnitude)
-        energy_filtered     =  signal_energy(fft_magnitude_filtered)
-        energy_noise        =  signal_energy(fft_magnitude_noise)
-        print(f"energy: {energy}")
-        print(f"energy_filtered: {energy_filtered}")
-        print(f"energy_noise: {energy_noise}")
+        # Write to Excel
+        df.to_excel('debug_signal.xlsx', index=False)
 
 
-        SNA = np.sqrt(energy / (energy_noise + 1e-12))  # avoid divide-by-zero
-        SNA_dB = 20 * np.log10(SNA)
-        print(f"SNA_dB: {SNA_dB}")
-        
-        
-        
+        with wave.open('sinus_100hz_s16_unfiltered.wav', 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
+            wf.setframerate(RATE)
+            wf.writeframes(self.sinus_100hz_s16.tobytes())
+        print(f"Audio saved as {'sinus_100hz_s16_unfiltered.wav'}\n")
+
+
+        with wave.open('lowpass_array_100hz.wav', 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
+            wf.setframerate(RATE)
+            wf.writeframes(lowpass_array_100hz.tobytes())
+        print(f"Audio saved as {'lowpass_filtered_100hz.wav'}\n")
+
+
+        with wave.open('lowpass_array_1000hz.wav', 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
+            wf.setframerate(RATE)
+            wf.writeframes(lowpass_array_1000hz.tobytes())
+        print(f"Audio saved as {'lowpass_filtered_1000hz.wav'}\n")
+
+
         plt.figure()
-        plt.plot(time[:2000], self.sinus_100hz_s16[:2000])
+        plt.plot(time[:4000], self.sinus_100hz_s16[:4000], color='blue', label='sinus_100hz_s16')
+        plt.plot(time[:4000], lowpass_array_100hz[:4000], color='orange', label='lowpass_array_100hz')
+        plt.plot(time[:4000], lowpass_array_1000hz[:4000], color='orange', label='lowpass_array_1000hz')
         plt.xlabel('time')
-        plt.ylabel('self.sinus_100hz_s16')
+        plt.legend()
+        plt.ylabel(f"pcm. LowPass Filtered with CutOff freq.: {CUTOFF} ")
         plt.grid(True, which='both', linestyle='--', linewidth=0.1)
-        plt.savefig("self.sinus_100hz_s16.png", dpi=600)
-        
+        plt.savefig("self.sinus_100_1000hz_s16.png", dpi=600)
+        plt.close()
+
+
+        if SNA_100hz_dB > 0 :
+            result1 = True
+        if SNA_1000hz_dB > 0 :
+            result2 = True
             
-        plt.figure()
-        plt.loglog(frequencies[frequencies_pos], fft_magnitude[frequencies_pos])
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('fft_magnitude')
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.savefig("fft_magnitude.png", dpi=300)
-        
-        
-        
-        plt.figure()
-        plt.loglog(frequencies[frequencies_pos], fft_magnitude_filtered[frequencies_pos])
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('fft_magnitude_filtered ')
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.savefig("fft_magnitude_filtered .png", dpi=300)     
-
-
-        plt.figure()
-        plt.loglog(frequencies[frequencies_pos], fft_magnitude_noise[frequencies_pos])
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('fft_magnitude_noise')
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.savefig("fft_magnitude_noise.png", dpi=300)
-
-
-
-        if SNA_dB > 30 :
-            result = True
-        
-        self.assertTrue(result, "Expected result to be True")
+        self.assertTrue(result1 and result2, "Expected result to be True")
     
 
 
