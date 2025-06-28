@@ -98,9 +98,15 @@ class UnitTest_LowPass(unittest.TestCase):
         self.manager.shutdown()
 
 
+
+    # a) Plot the frequency response for visual checks
+    # b) Check if the attenuation within the passband is within acceptable limits.
+    # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_01_Check_LowPass_Check_TransferFunction(self):
         result_H_cutoff     = False
+        result_H_passband   = False
         result_H_dc         = False
+        result_freqOffset   = False
         
         
         # Compute the frequency response
@@ -125,36 +131,83 @@ class UnitTest_LowPass(unittest.TestCase):
         plt.savefig("filter_response_lowpass.png", dpi=300)
         plt.close()
         
-        # Find the index closest to normal_cutoff
+        
+        # Find the index closest to normal_cutoff  
         idx_cutoff = np.argmin(np.abs(frequencies - CUTOFF))
-        
-        H_cutoff_dB        = 20 * np.log10(np.abs(h[idx_cutoff]))
-        H_dc_dB            = 20 * np.log10(np.abs(h[0]))
-        print(f"H_cutoff_dB: {H_cutoff_dB}")
-        print(f"H_dc_dB: {H_dc_dB}")
-        
+
+        # Check for minim attentiation inside stopband. Consider stop band + 10% offset. 
+        # because the specified attentuation is not yet reached at exactly Cutoff frequency 
+        idx_cutoffOffset = np.argmin(np.abs(frequencies - (CUTOFF*1.2)))
+
+
+        H_cutoff_min_dB        = 20 * np.log10(max(np.abs(h[idx_cutoffOffset:])))
+        print(f"frequencies[idx_cutoff]: {frequencies[idx_cutoff]}")
+
+
+        # calculate min frency response at inside passband first section 0 hz to CutOFF/2
+        # Because the response starts to drop before CutOff
+        idx_dc_min = np.argmin(np.abs(frequencies - (CUTOFF/2)))
+        H_dc_min_dB            = 20 * np.log10(min(np.abs(h[0:idx_dc_min])))
+
+        print(f"H_cutoff_min_dB: {H_cutoff_min_dB}")
+        print(f"H_dc_min_dB: {H_dc_min_dB}")
+
+
+        # check frequency offset to cuttoff frequency
+        offset_prc = 100* frequencies[idx_cutoffOffset]/frequencies[idx_cutoff]
+        if 110 <= offset_prc <= 130 :
+            result_freqOffset = True
+
+        offset_prc = 100* frequencies[idx_dc_min]/frequencies[idx_cutoff]
+        if 30 <= offset_prc <= 80 :
+            result_H_passband = True
+
+
         # check if attentuation is as expected at the specified cutt off frenquency
-        if H_cutoff_dB < -STOPBAND_ATTEN+1 :
+        if H_cutoff_min_dB < -STOPBAND_ATTEN :
             result_H_cutoff = True
             
         # check if attentuation is ZERO at 0 Hz
-        if -0.5 < H_dc_dB < 0.5 :
+        if -0.1 < H_dc_min_dB < 0.1 :
             result_H_dc = True
         
+                # Put into a DataFrame
+        df = pd.DataFrame({
+            'frequencies': frequencies,
+            'h': h,
+            'frequencies[idx_cutoff]': frequencies[idx_cutoff],
+            'frequencies[idx_cutoffOffset]': frequencies[idx_cutoffOffset],
+            'H_dc_min_dB': H_dc_min_dB,
+            'H_cutoff_min_dB': H_cutoff_min_dB
+        })
+
+        # Write to Excel
+        df.to_excel('test_Unit_01.xlsx', index=False)
         
-        result = result_H_cutoff and result_H_dc
         
-        self.assertTrue(result, "Expected result to be True")
+        print(f"result_freqOffset: {result_freqOffset}")
+        print(f"result_H_passband: {result_H_passband}")
+        print(f"result_H_cutoff: {result_H_cutoff}")
+        print(f"result_H_dc: {result_H_dc}")
+        
+        result = result_freqOffset and result_H_passband and result_H_cutoff and result_H_dc 
+        
+        self.assertTrue(result, "test_Unit_01 : Expected result to be True")
+        
+
         
         
 
+    # a) Check if the minimum attention within the stop band matchs the filter parameter specification.
+    # b) Check if the attenuation within the passband is within acceptable limits.
+    # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_02_Check_LowPass_Check_withSinus(self):
         result_gain_100hz   = False
         result_gain_1000hz  = False
         
 
-        self.sinus_100hz_s16,time = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
-        self.sinus_1000hz_s16,time = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
+        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
+        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -163,13 +216,13 @@ class UnitTest_LowPass(unittest.TestCase):
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
-
+        # Calculate energy
         unfiltered_energy_100hz     = signal_energy(self.sinus_100hz_s16)
         lowpass_energy_100hz        = signal_energy(lowpass_array_100hz )
         unfiltered_energy_1000hz    = signal_energy(self.sinus_1000hz_s16)
         lowpass_energy_1000hz       = signal_energy(lowpass_array_1000hz )
         
-         
+        # Calculate gain
         lowpass_gain_100hz =   10 * np.log10(lowpass_energy_100hz / unfiltered_energy_100hz)
         lowpass_gain_1000hz =  10 * np.log10(lowpass_energy_1000hz / unfiltered_energy_1000hz)
         
@@ -184,10 +237,27 @@ class UnitTest_LowPass(unittest.TestCase):
         if lowpass_gain_1000hz <= -(STOPBAND_ATTEN -30) :
             result_gain_1000hz = True
         
+
+        # Put into a DataFrame
+        df = pd.DataFrame({
+            'self.sinus_100hz_s16': self.sinus_100hz_s16,
+            'lowpass_array_100hz': lowpass_gain_100hz,
+            'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
+            'lowpass_array_1000hz': lowpass_array_1000hz,
+            'time': time,
+            'lowpass_gain_100hz': lowpass_gain_100hz,
+            'lowpass_gain_1000hz': lowpass_gain_1000hz
+        })
+
+        # Write to Excel
+        df.to_excel('test_Unit_02.xlsx', index=False)
+    
+    
+    
         result = result_gain_100hz and result_gain_1000hz
         
         self.assertTrue(result, "Expected result to be True")
-
+    
     
     
     def test_Unit_03_Check_LowPass_Check_OutPut_AudioIntegrity(self):
@@ -223,7 +293,7 @@ class UnitTest_LowPass(unittest.TestCase):
         })
 
         # Write to Excel
-        df.to_excel('debug_signal.xlsx', index=False)
+        df.to_excel('test_Unit_03.xlsx', index=False)
 
 
         with wave.open('sinus_100hz_s16_unfiltered.wav', 'wb') as wf:
