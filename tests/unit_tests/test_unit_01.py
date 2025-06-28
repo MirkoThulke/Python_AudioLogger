@@ -337,7 +337,7 @@ class UnitTest_LowPass(unittest.TestCase):
 
 
         lowpass_chunks      = []
-        filtered_chunk = []
+        filtered_chunk      = []
         i = 0
         for i in range(0, len(self.sinus_100hz_s16), CHUNK):        
             # Process the chunk
@@ -416,7 +416,7 @@ class UnitTest_LowPass(unittest.TestCase):
 
         plt.figure()
         plt.plot(time[:8000], self.sinus_100hz_s16[:8000], color='blue', label='sinus_100hz_s16')
-        plt.plot(time[:8000], lowpass_array_100hz[:8000], color='orange', label='lowpass_array_100hz')
+        plt.plot(time[:8000], lowpass_array_100hz[:8000], color='green', label='lowpass_array_100hz')
         plt.plot(time[:8000], lowpass_array_1000hz[:8000], color='orange', label='lowpass_array_1000hz')
         plt.xlabel('time')
         plt.legend()
