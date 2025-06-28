@@ -4,7 +4,7 @@ import multiprocessing
 import sys
 import numpy as np
 from scipy.signal import correlate
-from scipy.signal import cheby2, freqz, sosfilt, sosfreqz
+from scipy.signal import cheby2, freqz, sosfilt, sosfreqz, sosfilt_zi
 import matplotlib.pyplot as plt
 import pandas as pd
 import wave

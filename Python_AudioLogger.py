@@ -45,7 +45,7 @@ cmd> pip list --outdated
 import wx # click button GUI
 import pyaudio
 from endolith_weighting_filters import A_weight
-from scipy.signal import cheby2, sosfiltfilt
+from scipy.signal import cheby2, sosfilt, sosfilt_zi
 import numpy as np
 import ctypes
 import wave
@@ -135,6 +135,7 @@ STOPBAND_ATTEN = 80 # Stopband attenuation in dB : Reduction inside the stopband
 nyquist = RATE / 2
 normal_cutoff = CUTOFF / nyquist
 
+# Define Lowpass filter parameters
 sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
 
 
@@ -308,14 +309,18 @@ def apply_low_pass(data_dictionary):
 
     
     # convert to float for filtering
-    float_array  = data_dictionary['audio_data'].astype(np.float32)
-    
+    float_array     = data_dictionary['audio_data'].astype(np.float32)
+    sos_zi          = data_dictionary['lowpass_sos_zi'].astype(np.float32)
 
-    # Apply A-weighting
-    float_array_filt = sosfiltfilt(sos, float_array)
+    # Apply Low passfilter. use sosfilt because chunkwise filtering is required.
+    # store filter state to avoid artefacts between chunks !!
+    float_array_filt, sos_zi  = sosfilt(sos, float_array, zi=sos_zi)
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
+    
+    #store filter state for next chunk
+    data_dictionary['lowpass_sos_zi'] = sos_zi
     
     #print(f'audio_data: {audio_data}')
     #print(f'float_array: {float_array}')
@@ -348,6 +353,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
     if not is_lowpass.value :
         data_dictionary['a_weighted_signal'] = apply_a_weighting(data_dictionary)
     else :
+        # The Lowpass filter requires, the filter state from the previous chunk as argument.
         data_dictionary['lowpass_signal'] = apply_low_pass(data_dictionary)
         
     # Check  the maximum absolute value
@@ -1212,7 +1218,8 @@ def create_process_local_common_datadictionary_definition(manager):
         
     "audio_data": np.array([]),
     "a_weighted_signal": np.array([]),
-    "lowpass_signal": np.array([]),  
+    "lowpass_signal": np.array([]),
+    "lowpass_sos_zi": sosfilt_zi(sos), # initialse filter state, # lowpass filter state  
     "audio_data_pcm_abs": np.array([]),
     "audio_data_mV": np.array([]),
     "audio_data_mV_calib": np.array([]),
@@ -1335,6 +1342,7 @@ if __name__ == "__main__":
         data_dictionary['audio_data']                           = np.array([])
         data_dictionary['a_weighted_signal']                    = np.array([])
         data_dictionary['lowpass_signal']                       = np.array([])
+        data_dictionary['lowpass_sos_zi']                       = np.array([])
         data_dictionary['audio_data_pcm_abs']                   = np.array([])
         data_dictionary['audio_data_mV']                        = np.array([])
         data_dictionary['audio_data_mV_calib']                  = np.array([])
