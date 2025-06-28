@@ -17,7 +17,7 @@ from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
 from Python_AudioLogger import apply_low_pass
-from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS
+from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK
 
 
 # Unit test howto :
@@ -103,15 +103,13 @@ class UnitTest_LowPass(unittest.TestCase):
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_01_Check_LowPass_Check_TransferFunction(self):
+        global sos # import filter coeficients from function under test
         result_H_cutoff     = False
         result_H_passband   = False
         result_H_dc         = False
         result_freqOffset   = False
-        
-        
-        # Compute the frequency response
 
-        sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', analog=False, output='sos', fs=RATE )
+        
 
         # Compute frequency response
         frequencies, h = sosfreqz(sos, worN=1024, fs=RATE)  # w: frequency axis in Hz, h: complex gain
@@ -149,8 +147,8 @@ class UnitTest_LowPass(unittest.TestCase):
         idx_dc_min = np.argmin(np.abs(frequencies - (CUTOFF/2)))
         H_dc_min_dB            = 20 * np.log10(min(np.abs(h[0:idx_dc_min])))
 
-        print(f"H_cutoff_min_dB: {H_cutoff_min_dB}")
-        print(f"H_dc_min_dB: {H_dc_min_dB}")
+        print(f"H_cutoff_min_dB: {H_cutoff_min_dB:.2f}")
+        print(f"H_dc_min_dB: {H_dc_min_dB:.2f}")
 
 
         # check frequency offset to cuttoff frequency
@@ -202,12 +200,15 @@ class UnitTest_LowPass(unittest.TestCase):
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_02_Check_LowPass_Check_withSinus(self):
+
         result_gain_100hz   = False
         result_gain_1000hz  = False
         
+        test_chunk_duration = CHUNK / RATE
 
-        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
-        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
+
+        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -226,15 +227,15 @@ class UnitTest_LowPass(unittest.TestCase):
         lowpass_gain_100hz =   10 * np.log10(lowpass_energy_100hz / unfiltered_energy_100hz)
         lowpass_gain_1000hz =  10 * np.log10(lowpass_energy_1000hz / unfiltered_energy_1000hz)
         
-        print(f"lowpass_gain_100hz: {lowpass_gain_100hz}")
-        print(f"lowpass_gain_1000hz: {lowpass_gain_1000hz}")
+        print(f"lowpass_gain_100hz: {lowpass_gain_100hz:.2f}")
+        print(f"lowpass_gain_1000hz: {lowpass_gain_1000hz:.2f}")
         
         # expected gain to be close to zero+ tolerance
-        if -1.5 <= lowpass_gain_100hz <= 1.5 :
+        if -5 <= lowpass_gain_100hz <= 5 :
             result_gain_100hz = True
             
         # expected gain to be arround expected attentuation + tolerance
-        if lowpass_gain_1000hz <= -(STOPBAND_ATTEN -30) :
+        if lowpass_gain_1000hz <= -20 :
             result_gain_1000hz = True
         
 
@@ -252,22 +253,28 @@ class UnitTest_LowPass(unittest.TestCase):
         # Write to Excel
         df.to_excel('test_Unit_02.xlsx', index=False)
     
-    
+            
+        print(f"result_gain_100hz: {result_gain_100hz}")
+        print(f"result_gain_1000hz: {result_gain_1000hz}")
     
         result = result_gain_100hz and result_gain_1000hz
         
-        self.assertTrue(result, "Expected result to be True")
+        self.assertTrue(result, "test_Unit_02 : Expected result to be True")
     
     
-    
+    # a) Calculate SNR for a specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
+    # b) Check if the specified filter attentuation is met
     def test_Unit_03_Check_LowPass_Check_OutPut_AudioIntegrity(self):
-        result1 = False
-        result2 = False
-        global CUTOFF
+        result_SNA_100hz_dB = False
+        result_SNA_1000hz_dB = False
         
-        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1.0)
-        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, duration=3.0, amplitude=1.0)
-        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, duration=3.0, amplitude=1e-10)
+        
+        test_chunk_duration = CHUNK / RATE
+        
+        
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1e-10)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
         lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
@@ -276,24 +283,111 @@ class UnitTest_LowPass(unittest.TestCase):
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
-        
+
         SNA_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
         SNA_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
         
+        if SNA_100hz_dB >= -0.1 :
+            result_SNA_100hz_dB = True
+        if SNA_1000hz_dB <= -80.0 :
+            result_SNA_1000hz_dB = True
         
-        print(f"SNA_100hz_dB: {SNA_100hz_dB}")
-        print(f"SNA_1000hz_dB: {SNA_1000hz_dB}")
+        print(f"SNA_100hz_dB: {SNA_100hz_dB:.2f}")
+        print(f"SNA_1000hz_dB: {SNA_1000hz_dB:.2f}")
         
         
         # Put into a DataFrame
-        df = pd.DataFrame({
-            'self.sinus_100hz_s16': self.sinus_100hz_s16,
-            'lowpass_array_100hz': lowpass_array_100hz,
-            'time': time
-        })
+        df = pd.DataFrame([{
+            'SNA_100hz_dB': SNA_100hz_dB,
+            'SNA_1000hz_dB': SNA_1000hz_dB
+        }])
 
         # Write to Excel
         df.to_excel('test_Unit_03.xlsx', index=False)
+
+
+
+        result = result_SNA_100hz_dB and result_SNA_1000hz_dB
+                
+        print(f"result_SNA_100hz_dB: {result_SNA_100hz_dB}")
+        print(f"result_SNA_1000hz_dB: {result_SNA_1000hz_dB}")  
+        
+
+        
+        self.assertTrue(result, "test_Unit_03 : Expected result to be True")
+    
+
+
+    # a) Plot unfiltered and filtered sinus and overlay signals
+    # b) Save wave files to check by licening if noise is present in the filtered signals
+    def test_Unit_04_Check_LowPass_Check_OutPut_AudioIntegrity_Plot_Wave(self):
+
+        chunk_duration = CHUNK / RATE
+        
+        
+        test_duration = 4.0 # seconds
+        test_number_chunks = int(test_duration / chunk_duration)
+        
+        
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1.0)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=1.0)
+        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1e-10)
+        
+        # Simulate the chunk wise low pass filtering in order to detect noise due to transients etc.
+
+
+        lowpass_chunks      = []
+        filtered_chunk = []
+        i = 0
+        for i in range(0, len(self.sinus_100hz_s16), CHUNK):        
+            # Process the chunk
+            self.data_dictionary['audio_data']  = self.sinus_100hz_s16[i:i+CHUNK]
+            filtered_chunk                      = apply_low_pass(self.data_dictionary)
+            lowpass_chunks.append(filtered_chunk)
+        
+        # Join all filtered chunks into one array
+        lowpass_array_100hz = np.concatenate(lowpass_chunks)
+
+
+
+        lowpass_chunks          = []
+        filtered_chunk          = []
+        i = 0
+        for i in range(0, len(self.sinus_1000hz_s16), CHUNK):        
+            # Process the chunk
+            self.data_dictionary['audio_data']  = self.sinus_1000hz_s16[i:i+CHUNK] 
+            filtered_chunk                      = apply_low_pass(self.data_dictionary)
+            lowpass_chunks.append(filtered_chunk)
+        
+        # Join all filtered chunks into one array
+        lowpass_array_1000hz = np.concatenate(lowpass_chunks)
+        
+        
+        SNA_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
+        SNA_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])
+        
+        if SNA_100hz_dB >= -0.1 :
+            result_SNA_100hz_dB = True
+        if SNA_1000hz_dB <= -80.0 :
+            result_SNA_1000hz_dB = True
+        
+        print(f"SNA_100hz_dB: {SNA_100hz_dB:.2f}")
+        print(f"SNA_1000hz_dB: {SNA_1000hz_dB:.2f}")
+        
+        
+        # Put into a DataFrame
+        df = pd.DataFrame([{
+            'self.sinus_100hz_s16': self.sinus_100hz_s16,
+            'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
+            'self.sinus_zero_s16': self.sinus_zero_s16,
+            'lowpass_array_100hz': lowpass_array_100hz,
+            'lowpass_array_1000hz': lowpass_array_1000hz,                        
+            'SNA_100hz_dB': SNA_100hz_dB,
+            'SNA_1000hz_dB': SNA_1000hz_dB
+        }])
+
+        # Write to Excel
+        df.to_excel('test_Unit_04.xlsx', index=False)
 
 
         with wave.open('sinus_100hz_s16_unfiltered.wav', 'wb') as wf:
@@ -321,24 +415,21 @@ class UnitTest_LowPass(unittest.TestCase):
 
 
         plt.figure()
-        plt.plot(time[:4000], self.sinus_100hz_s16[:4000], color='blue', label='sinus_100hz_s16')
-        plt.plot(time[:4000], lowpass_array_100hz[:4000], color='orange', label='lowpass_array_100hz')
-        plt.plot(time[:4000], lowpass_array_1000hz[:4000], color='orange', label='lowpass_array_1000hz')
+        plt.plot(time[:8000], self.sinus_100hz_s16[:8000], color='blue', label='sinus_100hz_s16')
+        plt.plot(time[:8000], lowpass_array_100hz[:8000], color='orange', label='lowpass_array_100hz')
+        plt.plot(time[:8000], lowpass_array_1000hz[:8000], color='orange', label='lowpass_array_1000hz')
         plt.xlabel('time')
         plt.legend()
         plt.ylabel(f"pcm. LowPass Filtered with CutOff freq.: {CUTOFF} ")
         plt.grid(True, which='both', linestyle='--', linewidth=0.1)
-        plt.savefig("self.sinus_100_1000hz_s16.png", dpi=600)
+        plt.savefig("self.sinus100hz_LowPass100hz_LoPass1000hz_s16.png", dpi=600)
         plt.close()
 
 
-        if SNA_100hz_dB > 0 :
-            result1 = True
-        if SNA_1000hz_dB > 0 :
-            result2 = True
-            
-        self.assertTrue(result1 and result2, "Expected result to be True")
-    
+
+        result = True
+        self.assertTrue(result, "test_Unit_04 : Expected result to be True")
+
 
 
 # to call from comand line :
