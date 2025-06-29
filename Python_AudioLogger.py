@@ -138,6 +138,8 @@ normal_cutoff = CUTOFF / nyquist
 # Define Lowpass filter parameters
 sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
 
+# initialse filter state, # lowpass filter state  
+lowpass_filter_init_state = sosfilt_zi(sos)
 
 
 # Global Variables NOT in shared memory #######################################
@@ -270,6 +272,11 @@ def func_on_button_setDevices_click(frame, _device_index):
 
 
 def func_on_button_selectFilter_click(self, event, is_lowpass):
+    global lowpass_filter_init_state
+    
+    # initialse lowpass filter state
+    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_init_state
+    
     if self.filter_toggle_btn.GetValue():
             self.filter_toggle_btn.SetLabel("LowPass")
             is_lowpass.value = True
@@ -309,18 +316,20 @@ def apply_low_pass(data_dictionary):
 
     
     # convert to float for filtering
-    float_array     = data_dictionary['audio_data'].astype(np.float32)
-    sos_zi          = data_dictionary['lowpass_sos_zi'].astype(np.float32)
+    float_array                                     = data_dictionary['audio_data'].astype(np.float32)
+    
+    #load filter state from previous chunk
+    lowpass_filter_state                            = data_dictionary['lowpass_filter_init_state'].astype(np.float32)
 
     # Apply Low passfilter. use sosfilt because chunkwise filtering is required.
     # store filter state to avoid artefacts between chunks !!
-    float_array_filt, sos_zi  = sosfilt(sos, float_array, zi=sos_zi)
+    float_array_filt, lowpass_filter_state     = sosfilt(sos, float_array, zi=lowpass_filter_state)
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
     
     #store filter state for next chunk
-    data_dictionary['lowpass_sos_zi'] = sos_zi
+    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_state
     
     #print(f'audio_data: {audio_data}')
     #print(f'float_array: {float_array}')
@@ -331,11 +340,15 @@ def apply_low_pass(data_dictionary):
 
 
 def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
- 
+    global lowpass_filter_init_state
 
     # reset output arrays :
     data_dictionary['a_weighted_signal']                        = np.zeros(data_dictionary['a_weighted_signal'].shape)
+    
     data_dictionary['lowpass_signal']                           = np.zeros(data_dictionary['lowpass_signal'].shape)
+    # initialse lowpass filter state
+    data_dictionary['lowpass_filter_init_state']                = lowpass_filter_init_state
+    
     data_dictionary['audio_data_pcm_abs']                       = np.zeros(data_dictionary['audio_data_pcm_abs'].shape)
     data_dictionary['audio_data_mV']                            = np.zeros(data_dictionary['audio_data_mV'].shape)
     data_dictionary['audio_data_pressurePa']                    = np.zeros(data_dictionary['audio_data_pressurePa'].shape)
@@ -1211,7 +1224,8 @@ def create_shared_resource_manager():
 
 
 def create_process_local_common_datadictionary_definition(manager):
-   
+    global lowpass_filter_init_state
+    
     # PROCESS LOCAL COPIES ########################    
     # variables with process local copies   
     data_dictionary = manager.dict({
@@ -1219,7 +1233,7 @@ def create_process_local_common_datadictionary_definition(manager):
     "audio_data": np.array([]),
     "a_weighted_signal": np.array([]),
     "lowpass_signal": np.array([]),
-    "lowpass_sos_zi": sosfilt_zi(sos), # initialse filter state, # lowpass filter state  
+    "lowpass_filter_init_state": lowpass_filter_init_state, # initialse filter state, # lowpass filter state  
     "audio_data_pcm_abs": np.array([]),
     "audio_data_mV": np.array([]),
     "audio_data_mV_calib": np.array([]),
