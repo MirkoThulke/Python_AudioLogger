@@ -124,7 +124,7 @@ class UnitTest_LowPass(unittest.TestCase):
         plt.figure()
         plt.figure(figsize=(10, 6))
         plt.semilogx(frequencies, 20 * np.log10(np.abs(h)), 'b')
-        plt.title("Chebyshev Type II Lowpass Filter Frequency Response (Log X-Axis)")
+        plt.title("Chebyshev Type II Lowpass Filter Frequency Response")
         plt.xlabel("Frequency [Hz] (log scale)")
         plt.ylabel("Amplitude [dB]")
         plt.grid(True, which='both', linestyle='--', linewidth=0.5)

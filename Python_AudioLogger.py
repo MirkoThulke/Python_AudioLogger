@@ -346,8 +346,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
     data_dictionary['a_weighted_signal']                        = np.zeros(data_dictionary['a_weighted_signal'].shape)
     
     data_dictionary['lowpass_signal']                           = np.zeros(data_dictionary['lowpass_signal'].shape)
-    # initialse lowpass filter state
-    data_dictionary['lowpass_filter_init_state']                = lowpass_filter_init_state
+
     
     data_dictionary['audio_data_pcm_abs']                       = np.zeros(data_dictionary['audio_data_pcm_abs'].shape)
     data_dictionary['audio_data_mV']                            = np.zeros(data_dictionary['audio_data_mV'].shape)
@@ -443,6 +442,9 @@ def func_process_audio_input(data_dictionary, frames, frames_filtered, system_ca
     frames[:] = [] # use clear, since it is a DataDictionary shared list.
     frames_filtered[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
+    
+    # initialse lowpass filter state
+    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_init_state
     
     print(f"is_recording: {is_recording.value}\n")
     while is_recording.value==True :
