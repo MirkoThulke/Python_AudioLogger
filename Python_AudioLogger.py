@@ -128,7 +128,7 @@ OUTPUT_FILE_DIRECTORY = "audio_logfiles"
 
 
 # Constants for the Chebyshev Type II filter 
-CUTOFF = 200        # Cutoff frequency in Hz : the frequency where the attentuation is achieved / guarantied
+CUTOFF = 400        # Cutoff frequency in Hz : the frequency where the attentuation is achieved / guarantied
 ORDER = 8           # Filter order
 STOPBAND_ATTEN = 80 # Stopband attenuation in dB : Reduction inside the stopband
 # Design Chebyshev Type II low-pass filter
@@ -139,7 +139,7 @@ normal_cutoff = CUTOFF / nyquist
 sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
 
 # initialse filter state, # lowpass filter state  
-lowpass_filter_init_state = sosfilt_zi(sos)
+LOWPASS_INIT_STATE = sosfilt_zi(sos)
 
 
 # Global Variables NOT in shared memory #######################################
@@ -272,10 +272,10 @@ def func_on_button_setDevices_click(frame, _device_index):
 
 
 def func_on_button_selectFilter_click(self, event, is_lowpass):
-    global lowpass_filter_init_state
+    global LOWPASS_INIT_STATE
     
     # initialse lowpass filter state
-    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_init_state
+    data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
     
     if self.filter_toggle_btn.GetValue():
             self.filter_toggle_btn.SetLabel("LowPass")
@@ -319,7 +319,7 @@ def apply_low_pass(data_dictionary):
     float_array                                     = data_dictionary['audio_data'].astype(np.float32)
     
     #load filter state from previous chunk
-    lowpass_filter_state                            = data_dictionary['lowpass_filter_init_state'].astype(np.float32)
+    lowpass_filter_state                            = data_dictionary['lowpass_filter_state'].astype(np.float32)
 
     # Apply Low passfilter. use sosfilt because chunkwise filtering is required.
     # store filter state to avoid artefacts between chunks !!
@@ -329,7 +329,7 @@ def apply_low_pass(data_dictionary):
     int_array   = float_array_filt.astype(np.int16)
     
     #store filter state for next chunk
-    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_state
+    data_dictionary['lowpass_filter_state']    = lowpass_filter_state
     
     #print(f'audio_data: {audio_data}')
     #print(f'float_array: {float_array}')
@@ -340,7 +340,7 @@ def apply_low_pass(data_dictionary):
 
 
 def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
-    global lowpass_filter_init_state
+
 
     # reset output arrays :
     data_dictionary['a_weighted_signal']                        = np.zeros(data_dictionary['a_weighted_signal'].shape)
@@ -420,7 +420,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
 
 
 def func_process_audio_input(data_dictionary, frames, frames_filtered, system_calibration_factor_94db, _device_index, chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, recording_status_queue, recording_dba_queue, is_lowpass):
-
+    global LOWPASS_INIT_STATE
  
     #whole process will run in high priority mode
     p_func_process_audio_input = psutil.Process(os.getpid())
@@ -444,7 +444,7 @@ def func_process_audio_input(data_dictionary, frames, frames_filtered, system_ca
     data = []
     
     # initialse lowpass filter state
-    data_dictionary['lowpass_filter_init_state']    = lowpass_filter_init_state
+    data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
     
     print(f"is_recording: {is_recording.value}\n")
     while is_recording.value==True :
@@ -519,7 +519,7 @@ def func_run_calibration(data_dictionary, frames, _device_index , system_calibra
         
         
         # Calculate PCM to SPl ! 
-        func_calc_SPL(data_dictionary, system_calibration_factor_94db)
+        func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass)
         
         
         if data_dictionary['audio_data_pressurePa_rms'] > 0 : 
@@ -1226,7 +1226,7 @@ def create_shared_resource_manager():
 
 
 def create_process_local_common_datadictionary_definition(manager):
-    global lowpass_filter_init_state
+    global LOWPASS_INIT_STATE
     
     # PROCESS LOCAL COPIES ########################    
     # variables with process local copies   
@@ -1235,7 +1235,7 @@ def create_process_local_common_datadictionary_definition(manager):
     "audio_data": np.array([]),
     "a_weighted_signal": np.array([]),
     "lowpass_signal": np.array([]),
-    "lowpass_filter_init_state": lowpass_filter_init_state, # initialse filter state, # lowpass filter state  
+    "lowpass_filter_state": LOWPASS_INIT_STATE, # initialse filter state, # lowpass filter state  
     "audio_data_pcm_abs": np.array([]),
     "audio_data_mV": np.array([]),
     "audio_data_mV_calib": np.array([]),
