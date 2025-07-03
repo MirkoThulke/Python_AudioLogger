@@ -1,146 +1,103 @@
-pipeline 
-{
-
-    agent 
-    { 
-        label 'Jenkins_Node_Python_AudioLogger' 
+pipeline {
+    agent {
+        label 'Jenkins_Node_Python_AudioLogger'
     }
 
-    environment 
-    {
-        // Define environment variables if needed
+    environment {
         EXAMPLE_VAR = "Hello, Jenkins!"
-        result = 1
     }
 
+    stages {
 
-    stages 
-    {
-        
-        
-        stage('Checkout') 
-        {
-            steps 
-            {
-                // Pulls code from your GitHub repository
+        stage('Checkout') {
+            steps {
                 checkout scm
             }
         }
 
+        stage('Integration Test - Python Config') {
+            steps {
+                echo "🔍 Running Python config integration test..."
 
-        stage('Check Python config') 
-        {
-            steps 
-                {
-                    echo "Running integration tests..."
-                
-                    // Run test commands here
-                    // to do : 
-                    //  Check Python version
-                    // Check pip versions are uptodate
-                    bat 'pytest tests/config_test/test_python_config.py'
-                    
-                    script 
-                    {
-                        if (result != "0") 
-                        {
-                            echo "⚠️ Found ${result} outdated packages."
-                            currentBuild.result = 'UNSTABLE'  // mark as UNSTABLE
-                        } 
-                        else 
-                        {
-                            echo "✅ All packages are up to date."
-                        }           
-                    }              
+                script {
+                    def error_flag = bat(script: 'pytest tests/integration_tests/test_pythonConfig.py', returnStatus: true)
+
+                    if (error_flag != 0) {
+                        echo "⚠️ Integration test failed with code ${error_flag}."
+                        currentBuild.result = 'UNSTABLE'
+                    } else {
+                        echo "✅ Integration test passed. All good."
+                    }
                 }
+            }
+        }
+
+        stage('Integration Tests - Functional') {
+            steps {
+                echo "🔧 Running functional integration tests..."
+
+                script {
+                    def error_flag = bat(script: 'pytest tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
+
+                    if (error_flag != 0) {
+                        error "❌ Functional tests failed with code ${error_flag}"
+                    } else {
+                        echo "✅ Functional tests passed. All good."
+                    }
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            steps {
+                echo "🧪 Running unit tests..."
+
+                script {
+                    def error_flag = bat(script: 'pytest tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
+
+                    if (error_flag != 0) {
+                        error "❌ Unit tests failed with code ${error_flag}"
+                    } else {
+                        echo "✅ Unit tests passed. All good."
+                    }
+                }
+            }
         }
 
 
-        stage('Integration Tests') 
-        {
-            steps 
-            {
-                echo "Running integration tests..."
-                
-                // Run test commands here
-                // To Do :  Integration test
-                // Run on complete Python Programming
-                // process audio, save audio
-                // Inject perfect sinus 
-                // save perfect sinus 
-                // A-weighted : at 1kHz, no filtering EXPECTED
-                // Low Pass Filtered : ar 100 Hz : No filtering expected
-                // Check via signal convuluation in time domain
-                
-                // also : check that wave files are stored due to deteted noise
-                
-                bat 'pytest tests/integration_tests/test_integration_01.py'
-                
+        stage('Smoke Test') {
+            steps {
+                echo "🧪 Running smoke tests..."
+
+                script {
+                    def error_flag = bat(script: 'pytest tests/unit_tests/test_smoke_audioInput.py', returnStatus: true)
+
+                    if (error_flag != 0) {
+                        error "❌ Unit tests failed with code ${error_flag}"
+                    } else {
+                        echo "✅ Unit tests passed. All good."
+                    }
+                }
             }
         }
-        
-        
-        stage('Unit Tests') 
-        {
-            steps 
-            {
-                echo "Running unit tests..."
-                
-                // Run test commands here
-                // To Do :  Integration test
-                // Run individual functions
-                // LowPass Filtering for example
-                // A- WEIGHTING
-                
-                
+
+        stage('Deploy') {
+            steps {
+                echo "🚀 Deploying the application..."
+                // Your deploy logic here
             }
         }
-        
-        
-        stage('Smoke Test') 
-        {
-            steps 
-            {
-                echo "Running smoke test..."
-                
-                // Run test commands here
-                // To Do :  Integration test
-                //    - Detect a USB microphone,
-                //    - Capture audio, and
-                //    - Store it as a WAV file
-                
-                
-            }
-        }  
-        
-        
-        stage('Deploy') 
-        {
-            steps 
-            {
-                echo "Deploying the application..."
-                // Deploy logic goes here (e.g., copy files, Docker deploy, etc.)
-            }
-        }
-        
     }
 
-
-    post 
-    {
-        always 
-        {
-            echo "Pipeline finished."
+    post {
+        always {
+            echo "🏁 Pipeline finished."
         }
-        success 
-        {
-            echo "Build succeeded!"
+        success {
+            echo "✅ Build succeeded!"
         }
-        failure 
-        {
-            echo "Build failed."
+        failure {
+            echo "❌ Build failed."
         }
     }
-    
-    
 }
