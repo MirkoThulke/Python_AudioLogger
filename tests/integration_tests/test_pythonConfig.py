@@ -4,11 +4,13 @@ import subprocess
 
 
 
-PASS        = False
-FAILED      = True
+# Pytest section ########
+PASSED      = True
+FAILED      = False
 
+result  = FAILED 
+#########################
 
-error_flag = PASS  # No fault
 
 
 def check_python_version():
@@ -17,19 +19,25 @@ def check_python_version():
     
     print(f"Detected Python version: {version_info.major}.{version_info.minor}.{version_info.micro}")
     
-    return PASS
+    assert PASSED
 
 
 
 def save_outdated_packages_to_json():
 
-    return PASS
+    assert PASSED
 
         
         
 if __name__ == "__main__":
     
-    error_flag      = check_python_version() or save_outdated_packages_to_json()
-
-    sys.exit(error_flag)  # this return code goes back to Jenkins
+    result1      = check_python_version()
+    result2      = save_outdated_packages_to_json()
+    
+    if result1==FAILED or result2==FAILED:
+        result = FAILED
+    else:
+        result = PASSED
+        
+    sys.exit(result)  # this return code goes back to Jenkins
     

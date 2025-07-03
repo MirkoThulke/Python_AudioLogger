@@ -1,20 +1,21 @@
 import sys
 
 
-PASS        = False
-FAILED      = True
+# Pytest section ########
+PASSED      = True
+FAILED      = False
 
-
-error_flag = PASS  # No fault
+result  = FAILED 
+#########################
 
 
 
 def test_smoke_audioInput():
 
-    return PASS
+    assert PASSED
 
 
 
 if __name__ == "__main__":
-    error_flag =  test_smoke_audioInput()
-    sys.exit(error_flag)  # this return code goes back to Jenkins
+    result =  test_smoke_audioInput()
+    sys.exit(result)  # this return code goes back to Jenkins

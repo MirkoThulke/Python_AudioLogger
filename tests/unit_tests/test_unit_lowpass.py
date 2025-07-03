@@ -20,8 +20,12 @@ from Python_AudioLogger import apply_low_pass
 from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK
 
 
-PASS        = False
-FAILED      = True
+# Pytest section ########
+PASSED      = True
+FAILED      = False
+
+result  = FAILED 
+#########################
 
 # Unit test howto :
 # https://youtu.be/6tNS--WetLI?feature=shared
@@ -479,6 +483,6 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()  # Optional, but good for Windows
     unittest.main()
     
-    error_flag = PASS
+    result = PASSED # pytest result
     
-    sys.exit(error_flag)  # this return code goes back to Jenkins
+    sys.exit(result)  # this return code goes back to Jenkins

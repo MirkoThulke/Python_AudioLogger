@@ -32,16 +32,22 @@ pipeline {
             }
         }
 
-        stage('Integration Tests - Functional') {
-            steps {
+        stage('Integration Tests - Functional') 
+        {
+            steps 
+            {
                 echo "🔧 Running functional integration tests..."
 
-                script {
+                script 
+                {
                     def error_flag = bat(script: 'pytest tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
 
-                    if (error_flag != 0) {
+                    if (error_flag != 0) 
+                    {
                         error "❌ Functional tests failed with code ${error_flag}"
-                    } else {
+                    } 
+                    else 
+                    {
                         echo "✅ Functional tests passed. All good."
                     }
                 }
