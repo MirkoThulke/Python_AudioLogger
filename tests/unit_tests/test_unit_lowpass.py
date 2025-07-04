@@ -17,7 +17,7 @@ from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
 from Python_AudioLogger import apply_low_pass
-from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK
+from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK, LOWPASS_INIT_STATE
 
 
 # Pytest section ########
@@ -86,9 +86,9 @@ class UnitTest_LowPass(unittest.TestCase):
         self.manager = create_shared_resource_manager()
         self.data_dictionary = create_process_local_common_datadictionary_definition(self.manager)
         
-        # save lowpass filter init state :
-        self.lowpass_init_state = self.data_dictionary['lowpass_filter_init_state']
-        
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
+        self.lowpass_filter_state = []
         
         (
             self._device_index,
@@ -223,7 +223,7 @@ class UnitTest_LowPass(unittest.TestCase):
         
 
         
-        if np.all(self.lowpass_init_state != 0):
+        if np.all(self.lowpass_filter_state != 0):
             # All filter initial state elements are non-zero. The filter is initialised
             result_filter_init = True
             
@@ -236,12 +236,16 @@ class UnitTest_LowPass(unittest.TestCase):
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
-        self.data_dictionary['lowpass_filter_init_state'] = self.lowpass_init_state
+        
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
         lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
         
         
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
-        self.data_dictionary['lowpass_filter_init_state'] = self.lowpass_init_state
+        
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
         # Calculate energy
@@ -279,7 +283,7 @@ class UnitTest_LowPass(unittest.TestCase):
     
         print(f"test_Unit_02:\n")
         print(f"lowpass_gain_100hz: {lowpass_gain_100hz:.2f}")
-        print(f"lowpass_init_state: {self.lowpass_init_state}")
+        print(f"lowpass_filter_state: {self.lowpass_filter_state}")
         print(f"lowpass_gain_1000hz: {lowpass_gain_1000hz:.2f}")
         print(f"result_filter_init: {result_filter_init}")  
         print(f"result_gain_100hz: {result_gain_100hz}")
@@ -307,12 +311,14 @@ class UnitTest_LowPass(unittest.TestCase):
         self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1e-10)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
-        self.data_dictionary['lowpass_filter_init_state'] = self.lowpass_init_state
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
         lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
 
 
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
-        self.data_dictionary['lowpass_filter_init_state'] = self.lowpass_init_state
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
 
@@ -354,7 +360,9 @@ class UnitTest_LowPass(unittest.TestCase):
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
     def test_Unit_04_Check_LowPass_CheckAudioOutput_appendChunks(self):
-
+        result_SNA_100hz_dB     = False
+        result_SNA_1000hz_dB    = False
+        
         chunk_duration = CHUNK / RATE
         
         
@@ -372,8 +380,8 @@ class UnitTest_LowPass(unittest.TestCase):
         lowpass_chunks      = []
         filtered_chunk      = []
         i = 0
-        # reset lowpass state to init values
-        self.data_dictionary['lowpass_filter_init_state'] = self.lowpass_init_state
+        # initialse lowpass filter state
+        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
         
         for i in range(0, len(self.sinus_100hz_s16), CHUNK):        
             # Process the chunk

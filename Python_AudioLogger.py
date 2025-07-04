@@ -1358,7 +1358,7 @@ if __name__ == "__main__":
         data_dictionary['audio_data']                           = np.array([])
         data_dictionary['a_weighted_signal']                    = np.array([])
         data_dictionary['lowpass_signal']                       = np.array([])
-        data_dictionary['lowpass_sos_zi']                       = np.array([])
+        data_dictionary['lowpass_filter_state']                 = LOWPASS_INIT_STATE # initialse filter state, # lowpass filter state 
         data_dictionary['audio_data_pcm_abs']                   = np.array([])
         data_dictionary['audio_data_mV']                        = np.array([])
         data_dictionary['audio_data_mV_calib']                  = np.array([])
