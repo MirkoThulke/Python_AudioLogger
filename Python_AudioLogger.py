@@ -1379,7 +1379,7 @@ if __name__ == "__main__":
         is_recording.value                                      = False
         is_logging.value                                        = False
         is_lowpass.value                                        = False
-        
+
         # Terminate running process, in case they are not closed already.
         #if recording_process.is_alive() :
         #    print("Timeout reached, terminating process...")
