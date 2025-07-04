@@ -34,7 +34,7 @@ pipeline {
 
         stage('Integration Tests - Functional') 
         {
-            steps 
+            steps
             {
                 echo "🔧 Running functional integration tests..."
 
