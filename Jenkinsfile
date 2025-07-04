@@ -76,7 +76,7 @@ pipeline {
                 echo "🧪 Running smoke tests..."
 
                 script {
-                    def error_flag = bat(script: 'pytest tests/unit_tests/test_smoke_audioInput.py', returnStatus: true)
+                    def error_flag = bat(script: 'pytest tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
 
                     if (error_flag != 0) {
                         error "❌ Unit tests failed with code ${error_flag}"
