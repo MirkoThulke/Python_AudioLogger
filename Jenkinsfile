@@ -45,7 +45,7 @@ pipeline {
                     if (error_flag != 0) 
                     {
                         error "❌ Functional tests failed with code ${error_flag}"
-                    } 
+                    }
                     else 
                     {
                         echo "✅ Functional tests passed. All good."
