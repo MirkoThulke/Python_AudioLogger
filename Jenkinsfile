@@ -147,9 +147,18 @@ pipeline {
         }
         success {
             echo "✅ Build succeeded!"
+            githubNotify status: 'SUCCESS', description: 'Build succeeded', context: 'jenkins/build'
         }
         failure {
             echo "❌ Build failed."
+            githubNotify status: 'FAILURE', description: 'Build failed', context: 'jenkins/build'
         }
+        unstable {
+            echo "❌ Unstable. Check Python Config."
+            githubNotify status: 'UNSTABLE', description: 'Build unstable', context: 'jenkins/build'
+        }
+        
+        
+        
     }
 }
