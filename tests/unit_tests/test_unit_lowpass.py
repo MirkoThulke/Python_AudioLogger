@@ -27,6 +27,10 @@ FAILED      = False
 result  = FAILED 
 #########################
 
+#########################
+# Pytest calls all functions starting with "test_" automatically
+# hence, functions to be called by pytest MUST start with "test_"
+
 # Unit test howto :
 # https://youtu.be/6tNS--WetLI?feature=shared
 

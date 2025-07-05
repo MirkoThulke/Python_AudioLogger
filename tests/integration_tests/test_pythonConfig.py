@@ -1,5 +1,4 @@
 import sys
-import os
 import platform
 import subprocess
 
@@ -9,10 +8,60 @@ PASSED      = True
 FAILED      = False
 
 #########################
+# Pytest calls all functions starting with "test_" automatically
+# hence, functions to be called by pytest MUST start with "test_"
+
+# Unit test howto :
+# https://youtu.be/6tNS--WetLI?feature=shared
 
 
+def update_package(package):
+    try:
+        # Your existing update logic here, e.g.
+        subprocess.run(['pip', 'install', '--upgrade', package], check=True)
+
+    except Exception as e:
+        assert False, f"Error during package update: {package}    {e}"
+
+def update_outdated_packages():
+    try:
+        # Get list of outdated packages
+        result = subprocess.run(
+            ['pip', 'list', '--outdated'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        lines = result.stdout.splitlines()
+        # Skip header (usually first 2 lines)
+        # Example output:
+        # Package    Version Latest Type
+        # ---------- ------- ------ -----
+        # certifi    2025.1.31 2025.6.15 wheel
+
+        if len(lines) < 3:
+            print("No outdated packages found.")
+            return
+
+        packages = []
+        for line in lines[2:]:  # skip headers
+            parts = line.split()
+            if parts:
+                packages.append(parts[0])
+
+        for package in packages:
+            print(f"Updating {package} ...")
+            update_package(package)
+
+    except Exception as e:
+        assert False, f"Error during package update test: {e}"
+    
+    
+    
 def test_python_version():
     """Ensure Python version is at least 3.8"""
+    print(f"Python version is:  {sys.version_info}\n")
     assert sys.version_info >= (3, 8), f"Python version too low: {platform.python_version()}"
 
 
@@ -20,22 +69,44 @@ def test_pip_installed():
     """Ensure pip is installed and working"""
     try:
         output = subprocess.check_output([sys.executable, "-m", "pip", "--version"])
-        assert b"pip" in output
+        print(f"pip version is:  {output}\n")
+        assert b"pip" in output, f"pip version not found.\n"
     except Exception as e:
         assert False, f"pip check failed: {e}"
-        
-def run_pip_check():
+
+    
+def test_pip_check():
     
     try:
         result = subprocess.run(["pip", "check"], capture_output=True, text=True)
         print(result.stdout)
         print(result.stderr)
-        assert result.returncode != 0
+        assert result.returncode == 0, "pip check found broken requirements"
         
     except Exception as e:
         assert False, f"pip check failed: {e}"
 
-def check_outdated():
+
+def test_get_pip_version():
+    try:
+        result = subprocess.run(
+            ['pip', '--version'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print("pip version output:", result.stdout.strip())
+        # Example output: pip 23.0.1 from /path/to/python/site-packages/pip (python 3.10)
+        # You can parse version number if needed:
+        version = result.stdout.split()[1]
+        return version
+    except subprocess.CalledProcessError as e:
+        print("Failed to get pip version:")
+        print(e.stderr)
+        return None
+    
+    
+def test_check_outdated():
     try:
         result = subprocess.run(
             ["pip", "list", "--outdated"],
@@ -54,6 +125,7 @@ def check_outdated():
         # If there's any outdated package listed (non-header lines), return 1
         lines = output.splitlines()
         if len(lines) > 2:  # Header is 2 lines
+            update_outdated_packages()
             assert False, f"Outdated packages found.: {lines}"
         else:
             assert True, f"No outdated packages found."
@@ -61,35 +133,51 @@ def check_outdated():
     except Exception as e:
         assert False, f"Error during pip list: {e}"
 
+
+
 def test_export_installed_packages():
-    with open('requirements_new.txt', 'w') as f:
-        subprocess.run(['pip', 'freeze'], stdout=f)      
+    try:
+        with open('requirements_new.txt', 'w') as f:
+            subprocess.run(['pip', 'freeze'], stdout=f)
+               
+    except Exception as e:
+        assert False, f"Error during pip freeze: {e}"
+
 
 def load_requirementsFiles(file_path):
-    with open(file_path, 'r') as f:
-        lines = f.readlines()
-    return set(line.strip() for line in lines if line.strip() and not line.startswith('#'))
+    try:
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+            return set(line.strip() for line in lines if line.strip() and not line.startswith('#'))
+    except Exception as e:
+        assert False, f"Error during loading of requirement files: {e}"
 
 
-def compare_requirementsFiles(file1, file2):
-    reqs1 = load_requirementsFiles(file1)
-    reqs2 = load_requirementsFiles(file2)
+def test_compare_requirementsFiles(file1, file2):
+    try:
+        reqs1 = load_requirementsFiles(file1)
+        reqs2 = load_requirementsFiles(file2)
 
-    only_in_1 = reqs1 - reqs2
-    only_in_2 = reqs2 - reqs1
+        only_in_1 = reqs1 - reqs2
+        only_in_2 = reqs2 - reqs1
 
-    if not only_in_1 and not only_in_2:
-        print("The requirements files are functionally identical.")
-    else:
-        if only_in_1:
-            print(f"Packages only in {file1}:")
-            for pkg in only_in_1:
-                print(f"  {pkg}")
-        if only_in_2:
-            print(f"Packages only in {file2}:")
-            for pkg in only_in_2:
-                print(f"  {pkg}")  
-        assert False, f"Missing packages."   
+        if not only_in_1 and not only_in_2:
+            print("The requirements files are functionally identical.")
+        else:
+            if only_in_1:
+                print(f"Packages only in {file1}:")
+                for pkg in only_in_1:
+                    print(f"  {pkg}")
+                    
+            if only_in_2:
+                print(f"Packages only in {file2}:")
+                for pkg in only_in_2:
+                    print(f"  {pkg}") 
+             
+            assert False, f"Missing packages."   
+
+    except Exception as e:
+        assert False, f"Error during comparison of requirement files: {e}"
 
 
 
@@ -100,17 +188,22 @@ def test_check_required_packages():
         output = subprocess.check_output([sys.executable, "-m", "pip", "freeze"])
         installed = set([line.split("==")[0].lower() for line in output.decode().splitlines()])
         missing = required - installed
+        print(f"Missing Packages: {missing }\n")
         assert not missing, f"Missing packages: {missing}"
     except Exception as e:
         assert False, f"Package check failed: {e}"
 
 
+
+
+
 if __name__ == "__main__":
-    
+    # only used for debugging. Pytest calls all functions starting with "test_" automatically
     test_python_version()
     test_pip_installed()
-    run_pip_check()
-    check_outdated()
+    test_pip_check()
+    test_get_pip_version()
+    test_check_outdated()
     test_export_installed_packages()
-    compare_requirementsFiles("requirements.txt","requirements_new.txt")
+    test_compare_requirementsFiles("requirements.txt","requirements_new.txt")
     test_check_required_packages()
