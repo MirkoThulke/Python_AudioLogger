@@ -8,7 +8,7 @@ PASSED      = True
 FAILED      = False
 
 # For requirement.txt file check
-file1 = "../../requirements.txt"
+file1 = "requirements.txt"
 file2 = "requirements_new.txt"
 
 
@@ -104,7 +104,7 @@ def test_get_pip_version():
         # Example output: pip 23.0.1 from /path/to/python/site-packages/pip (python 3.10)
         # You can parse version number if needed:
         version = result.stdout.split()[1]
-        assert "pip" in version.decode().lower()
+        assert "pip" in version.lower()
         
     except subprocess.CalledProcessError as e:
         print("Failed to get pip version.")
