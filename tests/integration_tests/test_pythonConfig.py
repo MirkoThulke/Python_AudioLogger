@@ -99,19 +99,18 @@ def test_get_pip_version():
             capture_output=True,
             text=True,
             check=True
-        )
+            )
         print("pip version output:", result.stdout.strip())
         # Example output: pip 23.0.1 from /path/to/python/site-packages/pip (python 3.10)
         # You can parse version number if needed:
-        version = result.stdout.split()[1]
-        assert "pip" in version.lower()
+        assert "pip" in result.stdout.lower()
         
     except subprocess.CalledProcessError as e:
         print("Failed to get pip version.")
         print(e.stderr)
         assert False, f"pip check failed: {e}"
     
-
+    
     
 def test_check_outdated():
     try:
