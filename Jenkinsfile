@@ -13,23 +13,37 @@ pipeline {
           
         stage('Validate Python Configuration') {
             steps {
-                // Freeze installed packages
-                bat 'pip freeze > requirements_new.txt'
-
-                // Compare with requirements.txt
-                bat 'fc /B requirements.txt requirements_new.txt > nul || (echo Installed packages differ from requirements.txt! && fc requirements.txt requirements_new.txt && exit /b 1)'
-
-                // Check for broken dependencies
-                bat 'pip check || (echo ERROR: Broken dependencies detected! && exit /b 1)'
-
-                // List outdated packages
-                bat 'pip list --outdated > outdated-packages.txt'
-                bat 'echo Outdated packages listed in outdated-packages.txt'
-            
-                // Check if outdated-packages.txt is not empty and mark build UNSTABLE
                 script {
+                    // Freeze installed packages
+                    bat 'pip freeze > requirements_new.txt'
+
+                    // Compare with requirements.txt
+                    def compareResult = bat(
+                        script: 'fc /B requirements.txt requirements_new.txt > nul',
+                        returnStatus: true
+                    )
+                    if (compareResult != 0) {
+                        echo 'Installed packages differ from requirements.txt!'
+                        bat 'fc requirements.txt requirements_new.txt'
+                        currentBuild.result = 'UNSTABLE'
+                    }
+
+                    // Check for broken dependencies
+                    def checkDeps = bat(
+                        script: 'pip check',
+                        returnStatus: true
+                    )
+                    if (checkDeps != 0) {
+                        echo 'Broken dependencies detected!'
+                        currentBuild.result = 'UNSTABLE'
+                    }
+
+                    // List outdated packages
+                    bat 'pip list --outdated > outdated-packages.txt'
+                    bat 'echo Outdated packages listed in outdated-packages.txt'
+
+                    // Check if outdated-packages.txt is not empty and mark build UNSTABLE
                     def outdated = readFile('outdated-packages.txt').trim()
-                    
                     if (outdated) {
                         echo 'Outdated packages found. Marking build as UNSTABLE.'
                         currentBuild.result = 'UNSTABLE'
@@ -38,7 +52,8 @@ pipeline {
                     }
                 }
             }
-        }  
+        }
+    }
         
 
         stage('Checkout') {
