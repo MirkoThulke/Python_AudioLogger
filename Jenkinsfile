@@ -8,6 +8,56 @@ pipeline {
     }
 
     stages {
+    #### put individual stages here ....
+    #### each stage represents a jenkins pipeline stage
+
+        stage('Validate Python Dependencies') {
+            steps {
+
+                    # Freeze installed packages to a file
+                    pip freeze > requirements_new.txt
+        
+                    # Read local freeze and requirements.txt content
+                    $installed = Get-Content requirements_new.txt -Raw
+                    $required = Get-Content requirements.txt -Raw
+        
+                    # Compare the two files
+                    if ($installed -ne $required) {
+                        Write-Error "Installed packages differ from requirements.txt!"
+                        exit 1
+                    } else {
+                        Write-Output "Installed packages match requirements.txt."
+                    }
+        
+        stage('Validate Python Dependencies') {
+            steps {
+                // Freeze installed packages
+                bat 'pip freeze > requirements_new.txt'
+
+                // Compare with requirements.txt
+                bat 'fc /B requirements.txt requirements_new.txt > nul || (echo Installed packages differ from requirements.txt! && fc requirements.txt requirements_new.txt && exit /b 1)'
+
+                // Check for broken dependencies
+                bat 'pip check || (echo ERROR: Broken dependencies detected! && exit /b 1)'
+
+                // List outdated packages
+                bat 'pip list --outdated > outdated-packages.txt'
+                bat 'echo Outdated packages listed in outdated-packages.txt'
+            
+                // Check if outdated-packages.txt is not empty and mark build UNSTABLE
+                script {
+                    def outdated = readFile('outdated-packages.txt').trim()
+                    
+                    if (outdated) {
+                        echo 'Outdated packages found. Marking build as UNSTABLE.'
+                        currentBuild.result = 'UNSTABLE'
+                    } else {
+                        echo 'No outdated packages found.'
+                    }
+            }
+        }
+            
+        
 
         stage('Checkout') {
             steps {
@@ -15,12 +65,13 @@ pipeline {
             }
         }
 
+
         stage('Integration Test - Python Config') {
             steps {
                 echo "🔍 Running Python config integration test..."
 
                 script {
-                    def error_flag = bat(script: 'pytest tests/integration_tests/test_pythonConfig.py', returnStatus: true)
+                    def error_flag = bat(script: 'pytest --junitxml=report.xml tests/integration_tests/test_pythonConfig.py', returnStatus: true)
 
                     if (error_flag != 0) {
                         echo "⚠️ Integration test failed with code ${error_flag}."
@@ -32,6 +83,8 @@ pipeline {
             }
         }
 
+
+
         stage('Integration Tests - Functional') 
         {
             steps
@@ -40,35 +93,26 @@ pipeline {
 
                 script 
                 {
-                    def error_flag = bat(script: 'pytest tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
+                    def error_flag = bat(script: 'pytest --junitxml=report.xml tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
 
-                    if (error_flag != 0) 
-                    {
-                        error "❌ Functional tests failed with code ${error_flag}"
-                    }
-                    else 
-                    {
-                        echo "✅ Functional tests passed. All good."
-                    }
                 }
             }
         }
+
+
 
         stage('Unit Test') {
             steps {
                 echo "🧪 Running unit tests..."
 
                 script {
-                    def error_flag = bat(script: 'pytest tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
+                    def error_flag = bat(script: 'pytest --junitxml=report.xml tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
 
-                    if (error_flag != 0) {
-                        error "❌ Unit tests failed with code ${error_flag}"
-                    } else {
-                        echo "✅ Unit tests passed. All good."
-                    }
                 }
-            }
+            } 
         }
+
+
 
 
         stage('Smoke Test') {
@@ -76,16 +120,14 @@ pipeline {
                 echo "🧪 Running smoke tests..."
 
                 script {
-                    def error_flag = bat(script: 'pytest tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
+                    
+                    def error_flag = bat(script: 'pytest --junitxml=report.xml tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
 
-                    if (error_flag != 0) {
-                        error "❌ Unit tests failed with code ${error_flag}"
-                    } else {
-                        echo "✅ Unit tests passed. All good."
-                    }
                 }
             }
         }
+
+
 
         stage('Deploy') {
             steps {
@@ -95,8 +137,12 @@ pipeline {
         }
     }
 
+
+
     post {
+        
         always {
+            junit 'report.xml' # publish results
             echo "🏁 Pipeline finished."
         }
         success {
