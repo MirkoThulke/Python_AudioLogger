@@ -160,7 +160,7 @@ def load_requirementsFiles(file_path):
         assert False, f"Error during loading of requirement files: {e}"
 
 
-def test_compare_requirementsFiles(file1, file2):
+def test_compare_requirementsFiles():
     try:
         reqs1 = load_requirementsFiles(file1)
         reqs2 = load_requirementsFiles(file2)
