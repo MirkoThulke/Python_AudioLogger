@@ -7,6 +7,11 @@ import subprocess
 PASSED      = True
 FAILED      = False
 
+# For requirement.txt file check
+file1 = "../../requirements.txt"
+file2 = "requirements_new.txt"
+
+
 #########################
 # Pytest calls all functions starting with "test_" automatically
 # hence, functions to be called by pytest MUST start with "test_"
@@ -137,7 +142,7 @@ def test_check_outdated():
 
 def test_export_installed_packages():
     try:
-        with open('requirements_new.txt', 'w') as f:
+        with open(file2, 'w') as f:
             subprocess.run(['pip', 'freeze'], stdout=f)
                
     except Exception as e:
@@ -164,6 +169,7 @@ def test_compare_requirementsFiles(file1, file2):
         if not only_in_1 and not only_in_2:
             print("The requirements files are functionally identical.")
         else:
+            assert False, f"Missing packages."
             if only_in_1:
                 print(f"Packages only in {file1}:")
                 for pkg in only_in_1:
@@ -173,8 +179,6 @@ def test_compare_requirementsFiles(file1, file2):
                 print(f"Packages only in {file2}:")
                 for pkg in only_in_2:
                     print(f"  {pkg}") 
-             
-            assert False, f"Missing packages."   
 
     except Exception as e:
         assert False, f"Error during comparison of requirement files: {e}"
@@ -183,13 +187,19 @@ def test_compare_requirementsFiles(file1, file2):
 
 def test_check_required_packages():
     """Ensure required packages are installed"""
-    required = {"requests", "pytest"}
+    required = {"requests", "pytest", "wxpython", "pyaudio", "scipy"}
+
     try:
         output = subprocess.check_output([sys.executable, "-m", "pip", "freeze"])
         installed = set([line.split("==")[0].lower() for line in output.decode().splitlines()])
         missing = required - installed
-        print(f"Missing Packages: {missing }\n")
+        if missing:
+            print(f"Missing Packages: {missing}")
+        else:
+            print("✅ All required packages are installed.")
+            
         assert not missing, f"Missing packages: {missing}"
+        
     except Exception as e:
         assert False, f"Package check failed: {e}"
 
@@ -205,5 +215,5 @@ if __name__ == "__main__":
     test_get_pip_version()
     test_check_outdated()
     test_export_installed_packages()
-    test_compare_requirementsFiles("requirements.txt","requirements_new.txt")
+    test_compare_requirementsFiles(file1,file2)
     test_check_required_packages()

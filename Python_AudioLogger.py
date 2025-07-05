@@ -35,6 +35,7 @@ important commands :
 cmd> python -m pip install --upgrade pip
 cmd> pip install pyaudio
 cmd> pip install numpy
+cmd> pip uninstall numba
 cmd> where python
 cmd> python --version
 cmd> python3 --version
