@@ -104,12 +104,14 @@ def test_get_pip_version():
         # Example output: pip 23.0.1 from /path/to/python/site-packages/pip (python 3.10)
         # You can parse version number if needed:
         version = result.stdout.split()[1]
-        return version
+        assert "pip" in version.decode().lower()
+        
     except subprocess.CalledProcessError as e:
-        print("Failed to get pip version:")
+        print("Failed to get pip version.")
         print(e.stderr)
-        return None
+        assert False, f"pip check failed: {e}"
     
+
     
 def test_check_outdated():
     try:
@@ -186,7 +188,7 @@ def test_compare_requirementsFiles(file1, file2):
 
 
 def test_check_required_packages():
-    """Ensure required packages are installed"""
+    
     required = {"requests", "pytest", "wxpython", "pyaudio", "scipy"}
 
     try:
@@ -196,7 +198,7 @@ def test_check_required_packages():
         if missing:
             print(f"Missing Packages: {missing}")
         else:
-            print("✅ All required packages are installed.")
+            print("All required packages are installed.")
             
         assert not missing, f"Missing packages: {missing}"
         

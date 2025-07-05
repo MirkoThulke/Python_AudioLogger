@@ -70,16 +70,16 @@ pipeline {
 
         stage('Integration Test - Python Config') {
             steps {
-                echo "🔍 Running Python config integration test..."
+                echo "Running Python config integration test..."
 
                 script {
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py', returnStatus: true)
 
                     if (error_flag != 0) {
-                        echo "⚠️ Integration test failed with code ${error_flag}."
+                        echo "Integration test failed with code ${error_flag}."
                         currentBuild.result = 'UNSTABLE'
                     } else {
-                        echo "✅ Integration test passed. All good."
+                        echo "Integration test passed. All good."
                     }
                 }
             }
@@ -91,7 +91,7 @@ pipeline {
         {
             steps
             {
-                echo "🔧 Running functional integration tests..."
+                echo "Running functional integration tests..."
 
                 script 
                 {
@@ -105,7 +105,7 @@ pipeline {
 
         stage('Unit Test') {
             steps {
-                echo "🧪 Running unit tests..."
+                echo "Running unit tests..."
 
                 script {
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
@@ -117,7 +117,7 @@ pipeline {
 
         stage('Smoke Test') {
             steps {
-                echo "🧪 Running smoke tests..."
+                echo "Running smoke tests..."
 
                 script {
                     
@@ -131,7 +131,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo "🚀 Deploying the application..."
+                echo "Deploying the application..."
                 // Your deploy logic here
             }
         }
@@ -143,18 +143,18 @@ pipeline {
         
         always {
             junit 'report.xml' // publish results
-            echo "🏁 Pipeline finished."
+            echo "Pipeline finished."
         }
         success {
-            echo "✅ Build succeeded!"
+            echo "Build succeeded!"
             githubNotify status: 'SUCCESS', description: 'Build succeeded', context: 'jenkins/build'
         }
         failure {
-            echo "❌ Build failed."
+            echo "Build failed."
             githubNotify status: 'FAILURE', description: 'Build failed', context: 'jenkins/build'
         }
         unstable {
-            echo "❌ Unstable. Check Python Config."
+            echo "Unstable. Check Python Config."
             githubNotify status: 'UNSTABLE', description: 'Build unstable', context: 'jenkins/build'
         }
         
