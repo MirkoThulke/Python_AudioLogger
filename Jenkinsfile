@@ -8,27 +8,32 @@ pipeline {
     }
 
     stages {
-    #### put individual stages here ....
-    #### each stage represents a jenkins pipeline stage
+        // put individual stages here ....
+        // each stage represents a jenkins pipeline stage
 
         stage('Validate Python Dependencies') {
             steps {
 
-                    # Freeze installed packages to a file
+                    // Freeze installed packages to a file
                     pip freeze > requirements_new.txt
+                    
+                    powershell '''
+                        # Read local freeze and requirements.txt content
+                        $installed = Get-Content requirements_new.txt -Raw
+                        $required = Get-Content requirements.txt -Raw
         
-                    # Read local freeze and requirements.txt content
-                    $installed = Get-Content requirements_new.txt -Raw
-                    $required = Get-Content requirements.txt -Raw
+                        # Compare the two files
+                        if ($installed -ne $required) {
+                            Write-Error "Installed packages differ from requirements.txt!"
+                            exit 1
+                        } else {
+                            Write-Output "Installed packages match requirements.txt."
+                        }
+                    '''
+            }  
+        }
         
-                    # Compare the two files
-                    if ($installed -ne $required) {
-                        Write-Error "Installed packages differ from requirements.txt!"
-                        exit 1
-                    } else {
-                        Write-Output "Installed packages match requirements.txt."
-                    }
-        
+                  
         stage('Validate Python Dependencies') {
             steps {
                 // Freeze installed packages
@@ -54,9 +59,9 @@ pipeline {
                     } else {
                         echo 'No outdated packages found.'
                     }
+                }
             }
-        }
-            
+        }  
         
 
         stage('Checkout') {
@@ -142,7 +147,7 @@ pipeline {
     post {
         
         always {
-            junit 'report.xml' # publish results
+            junit 'report.xml' // publish results
             echo "🏁 Pipeline finished."
         }
         success {
