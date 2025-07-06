@@ -70,23 +70,24 @@ pipeline {
         }
 
 
-
         stage('Set Commit SHA') {
             steps {
                     script {
-                            env.COMMIT_SHA = bat(returnStdout: true, script: 'git rev-parse HEAD').trim()
-                            echo "COMMIT_SHA set to ${env.COMMIT_SHA}"
+                            env.COMMIT_SHA = bat(
+                            script: 'git rev-parse HEAD', 
+                            returnStdout: true
+                            ).trim()
+                            echo "COMMIT_SHA is: ${env.COMMIT_SHA}"
                     }
             }
         }
-        
         
         
         stage('Notify GitHub - Pending') {
             steps {
                     script {
                         
-                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        def sha = env.COMMIT_SHA // Get the Groovy variable
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
@@ -178,7 +179,7 @@ pipeline {
         success {
                 script 
                 {
-                    def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                    def sha = env.COMMIT_SHA // Get the Groovy variable
                     
                     withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                         bat """
@@ -194,7 +195,7 @@ pipeline {
         failure {
                 script {
                         
-                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        def sha = env.COMMIT_SHA  // Get the Groovy variable
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
@@ -210,7 +211,7 @@ pipeline {
         unstable {
                 script {
                     
-                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        def sha = env.COMMIT_SHA  // Get the Groovy variable
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
