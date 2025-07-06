@@ -187,8 +187,8 @@ pipeline {
                          -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
                          -d '{"state": "neutral", "context": "jenkins/build", "description": "Python config actions pending"}'
                 '''
-            }
         }
+
         
 
 
