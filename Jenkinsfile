@@ -154,44 +154,49 @@ pipeline {
 
 
 
-    post {
+post {
 
         always {
-            junit 'report.xml' // publish results
-            echo "Pipeline finished."
+            node {
+                junit 'report.xml'  // publish results
+                echo "Pipeline finished."
+            }
         }
-
+    
         success {
-            bat '''
-                curl -H "Authorization: token %GITHUB_TOKEN%" \
-                     -H "Accept: application/vnd.github.v3+json" \
-                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
-                     -d '{"state": "success", "context": "jenkins/build", "description": "Build passed"}'
-                '''
-        }
-
-        failure {
-            bat '''
-                curl -H "Authorization: token %GITHUB_TOKEN%" \
-                     -H "Accept: application/vnd.github.v3+json" \
-                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
-                     -d '{"state": "failure", "context": "jenkins/build", "description": "Build failure"}'
-                '''
-        }
-
-        unstable {
-            withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')])
+            node {
                 bat '''
-                    curl -H "Authorization: token %GITHUB_TOKEN%" \
-                         -H "Accept: application/vnd.github.v3+json" \
-                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
-                         -d '{"state": "neutral", "context": "jenkins/build", "description": "Python config actions pending"}'
+                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                         -H "Accept: application/vnd.github.v3+json" ^
+                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
+                         -d "{\"state\": \"success\", \"context\": \"jenkins/build\", \"description\": \"Build passed\"}"
                 '''
+            }
         }
-
-        
-
-
+    
+        failure {
+            node {
+                bat '''
+                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                         -H "Accept: application/vnd.github.v3+json" ^
+                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
+                         -d "{\"state\": \"failure\", \"context\": \"jenkins/build\", \"description\": \"Build failure\"}"
+                '''
+            }
+        }
+    
+        unstable {
+            node {
+                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
+                    bat '''
+                        curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                             -H "Accept: application/vnd.github.v3+json" ^
+                             -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
+                             -d "{\"state\": \"neutral\", \"context\": \"jenkins/build\", \"description\": \"Python config actions pending\"}"
+                    '''
+                }
+            }
+        }
     }
 
 }
