@@ -74,7 +74,7 @@ pipeline {
             steps {
                     script {
                             env.COMMIT_SHA = bat(
-                            script: 'git rev-parse HEAD', 
+                            script: '@echo off & git rev-parse HEAD',
                             returnStdout: true
                             ).trim()
                             echo "COMMIT_SHA is: ${env.COMMIT_SHA}"
