@@ -51,7 +51,12 @@ pipeline {
     agent {
         label 'Jenkins_Node_Python_AudioLogger'
     }
-
+    
+    tools {
+        // required for githubChecks
+        maven 'Maven'   // name from Global Tool Configuration
+    }
+    
     environment {
         EXAMPLE_VAR = "Hello, Jenkins!"
     }
