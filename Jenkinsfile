@@ -145,20 +145,34 @@ pipeline {
             junit 'report.xml' // publish results
             echo "Pipeline finished."
         }
+        
         success {
             echo "Build succeeded!"
-            githubNotify status: 'SUCCESS', description: 'Build succeeded', context: 'jenkins/build'
+            githubChecks(
+                name: 'jenkins/build',
+                conclusion: 'SUCCESS',
+                summary: 'Build succeeded'
+            )
         }
+        
         failure {
             echo "Build failed."
-            githubNotify status: 'FAILURE', description: 'Build failed', context: 'jenkins/build'
+            githubChecks(
+                name: 'jenkins/build',
+                conclusion: 'FAILURE',
+                summary: 'Build failed'
+                )
         }
+        
         unstable {
             echo "Unstable. Check Python Config."
-            githubNotify status: 'UNSTABLE', description: 'Build unstable', context: 'jenkins/build'
+            githubChecks(
+                name: 'jenkins/build',
+                conclusion: 'NEUTRAL', // 'UNSTABLE' not a valid GitHub conclusion, 'NEUTRAL' is closest
+                summary: 'Build unstable'
+            )
         }
         
-        
-        
     }
+    
 }
