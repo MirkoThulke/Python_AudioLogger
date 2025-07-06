@@ -87,13 +87,13 @@ pipeline {
             steps {
                     script {
                         
-                        def sha = env.COMMIT_SHA // Get the Groovy variable
+ 
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                  -H "Accept: application/vnd.github.v3+json" ^
-                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                                  -d "{\"state\": \"pending\", \"context\": \"jenkins/build\", \"description\": \"Build started\"}"
                             """
                         }
@@ -179,13 +179,13 @@ pipeline {
         success {
                 script 
                 {
-                    def sha = env.COMMIT_SHA // Get the Groovy variable
+
                     
                     withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                         bat """
                             curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                  -H "Accept: application/vnd.github.v3+json" ^
-                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                                  -d "{\"state\": \"success\", \"context\": \"jenkins/build\", \"description\": \"Build passed\"}"
                         """
                     }
@@ -195,13 +195,12 @@ pipeline {
         failure {
                 script {
                         
-                        def sha = env.COMMIT_SHA  // Get the Groovy variable
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                      -H "Accept: application/vnd.github.v3+json" ^
-                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                                      -d "{\"state\": \"failure\", \"context\": \"jenkins/build\", \"description\": \"Build failure\"}"
                             """
                         }
@@ -211,13 +210,12 @@ pipeline {
         unstable {
                 script {
                     
-                        def sha = env.COMMIT_SHA  // Get the Groovy variable
                         
                         withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                             bat """
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                      -H "Accept: application/vnd.github.v3+json" ^
-                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                                      -d "{\"state\": \"neutral\", \"context\": \"jenkins/build\", \"description\": \"Python config actions pending\"}"
                             """
                         }
