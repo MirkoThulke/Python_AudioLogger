@@ -171,11 +171,23 @@ pipeline {
         }
 
         failure {
-
+            bat '''
+                curl -H "Authorization: token %GITHUB_TOKEN%" \
+                     -H "Accept: application/vnd.github.v3+json" \
+                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
+                     -d '{"state": "failure", "context": "jenkins/build", "description": "Build failure"}'
+                '''
         }
 
         unstable {
-
+            withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')])
+                bat '''
+                    curl -H "Authorization: token %GITHUB_TOKEN%" \
+                         -H "Accept: application/vnd.github.v3+json" \
+                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
+                         -d '{"state": "neutral", "context": "jenkins/build", "description": "Python config actions pending"}'
+                '''
+            }
         }
         
 
