@@ -54,11 +54,9 @@ pipeline {
     
     
     environment {
-
-        GITHUB_TOKEN = credentials('github-pat') // Jenkins credential ID of your PAT
-        COMMIT_SHA = "%{env.GIT_COMMIT}%"
         REPO = 'MirkoThulke/Python_AudioLogger'
     }
+
 
     stages {
         // put individual stages here ....
@@ -67,18 +65,38 @@ pipeline {
         
         stage('Checkout') {
             steps {
-                checkout scm
+                    checkout scm
             }
         }
 
+
+
+        stage('Set Commit SHA') {
+            steps {
+                    script {
+                            env.COMMIT_SHA = bat(returnStdout: true, script: 'git rev-parse HEAD').trim()
+                            echo "COMMIT_SHA set to ${env.COMMIT_SHA}"
+                    }
+            }
+        }
+        
+        
+        
         stage('Notify GitHub - Pending') {
             steps {
-                bat '''
-                curl -H "Authorization: token %GITHUB_TOKEN%" \
-                     -H "Accept: application/vnd.github.v3+json" \
-                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
-                     -d '{"state": "pending", "context": "jenkins/build", "description": "Build started"}'
-                '''
+                    script {
+                        
+                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        
+                        withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
+                            bat """
+                                curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                                 -H "Accept: application/vnd.github.v3+json" ^
+                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                 -d "{\"state\": \"pending\", \"context\": \"jenkins/build\", \"description\": \"Build started\"}"
+                            """
+                        }
+                    }
             }
         }
 
@@ -88,6 +106,7 @@ pipeline {
                 echo "Running Python config integration test..."
 
                 script {
+                    
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py', returnStatus: true)
 
                     if (error_flag != 0) {
@@ -108,10 +127,8 @@ pipeline {
             {
                 echo "Running functional integration tests..."
 
-                script 
-                {
+                script{
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
-
                 }
             }
         }
@@ -124,7 +141,6 @@ pipeline {
 
                 script {
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
-
                 }
             } 
         }
@@ -134,10 +150,8 @@ pipeline {
             steps {
                 echo "Running smoke tests..."
 
-                script {
-                    
+                script { 
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
-
                 }
             }
         }
@@ -162,31 +176,50 @@ pipeline {
         }
     
         success {
-                bat '''
-                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                         -H "Accept: application/vnd.github.v3+json" ^
-                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
-                         -d "{\"state\": \"success\", \"context\": \"jenkins/build\", \"description\": \"Build passed\"}"
-                '''
+                script 
+                {
+                    def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                    
+                    withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
+                        bat """
+                            curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                                 -H "Accept: application/vnd.github.v3+json" ^
+                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                 -d "{\"state\": \"success\", \"context\": \"jenkins/build\", \"description\": \"Build passed\"}"
+                        """
+                    }
+                }
         }
     
         failure {
-                bat '''
-                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                         -H "Accept: application/vnd.github.v3+json" ^
-                         -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
-                         -d "{\"state\": \"failure\", \"context\": \"jenkins/build\", \"description\": \"Build failure\"}"
-                '''
+                script {
+                        
+                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        
+                        withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
+                            bat """
+                                curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                                     -H "Accept: application/vnd.github.v3+json" ^
+                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                     -d "{\"state\": \"failure\", \"context\": \"jenkins/build\", \"description\": \"Build failure\"}"
+                            """
+                        }
+                }
         }
     
         unstable {
-                withCredentials([string(credentialsId: 'github-token-id', variable: 'GITHUB_TOKEN')]) {
-                    bat '''
-                        curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                             -H "Accept: application/vnd.github.v3+json" ^
-                             -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% ^
-                             -d "{\"state\": \"neutral\", \"context\": \"jenkins/build\", \"description\": \"Python config actions pending\"}"
-                    '''
+                script {
+                    
+                        def sha = env.COMMIT_SHA.trim()  // Get the Groovy variable
+                        
+                        withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
+                            bat """
+                                curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                                     -H "Accept: application/vnd.github.v3+json" ^
+                                     -X POST https://api.github.com/repos/${env.REPO}/statuses/${sha} ^
+                                     -d "{\"state\": \"neutral\", \"context\": \"jenkins/build\", \"description\": \"Python config actions pending\"}"
+                            """
+                        }
                 }
         }
     }
