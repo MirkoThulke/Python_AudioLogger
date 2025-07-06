@@ -52,13 +52,12 @@ pipeline {
         label 'Jenkins_Node_Python_AudioLogger'
     }
     
-    tools {
-        // required for githubChecks
-        maven 'Maven'   // name from Global Tool Configuration
-    }
     
     environment {
-        EXAMPLE_VAR = "Hello, Jenkins!"
+
+        GITHUB_TOKEN = credentials('github-pat') // Jenkins credential ID of your PAT
+        COMMIT_SHA = "%{env.GIT_COMMIT}%"
+        REPO = 'MirkoThulke/Python_AudioLogger'
     }
 
     stages {
@@ -69,6 +68,17 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Notify GitHub - Pending') {
+            steps {
+                bat '''
+                curl -H "Authorization: token %GITHUB_TOKEN%" \
+                     -H "Accept: application/vnd.github.v3+json" \
+                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
+                     -d '{"state": "pending", "context": "jenkins/build", "description": "Build started"}'
+                '''
             }
         }
 
@@ -145,39 +155,31 @@ pipeline {
 
 
     post {
-        
+
         always {
             junit 'report.xml' // publish results
             echo "Pipeline finished."
         }
-        
+
         success {
-            echo "Build succeeded!"
-            githubChecks(
-                name: 'jenkins/build',
-                conclusion: 'SUCCESS',
-                summary: 'Build succeeded'
-            )
+            bat '''
+                curl -H "Authorization: token %GITHUB_TOKEN%" \
+                     -H "Accept: application/vnd.github.v3+json" \
+                     -X POST https://api.github.com/repos/%REPO%/statuses/%COMMIT_SHA% \
+                     -d '{"state": "success", "context": "jenkins/build", "description": "Build passed"}'
+                '''
         }
-        
+
         failure {
-            echo "Build failed."
-            githubChecks(
-                name: 'jenkins/build',
-                conclusion: 'FAILURE',
-                summary: 'Build failed'
-                )
+
         }
-        
+
         unstable {
-            echo "Unstable. Check Python Config."
-            githubChecks(
-                name: 'jenkins/build',
-                conclusion: 'NEUTRAL', // 'UNSTABLE' not a valid GitHub conclusion, 'NEUTRAL' is closest
-                summary: 'Build unstable'
-            )
+
         }
         
+
+
     }
-    
+
 }
