@@ -160,29 +160,26 @@ def load_requirementsFiles(file_path):
 
 
 def test_compare_requirementsFiles():
-    try:
-        reqs1 = load_requirementsFiles(file1)
-        reqs2 = load_requirementsFiles(file2)
 
-        only_in_1 = reqs1 - reqs2
-        only_in_2 = reqs2 - reqs1
+    reqs1 = load_requirementsFiles(file1)
+    reqs2 = load_requirementsFiles(file2)
 
-        if not only_in_1 and not only_in_2:
-            print("The requirements files are functionally identical.")
-        else:
-            assert False, f"Missing packages."
-            if only_in_1:
-                print(f"Packages only in {file1}:")
-                for pkg in only_in_1:
-                    print(f"  {pkg}")
-                    
-            if only_in_2:
-                print(f"Packages only in {file2}:")
-                for pkg in only_in_2:
-                    print(f"  {pkg}") 
+    only_in_1 = reqs1 - reqs2
+    only_in_2 = reqs2 - reqs1
 
-    except Exception as e:
-        assert False, f"Error during comparison of requirement files: {e}"
+    if not only_in_1 and not only_in_2:
+        print("The requirements files are functionally identical.")
+    else:
+        msg = []
+        if only_in_1:
+            msg.append(f"Packages only in {file1}:")
+            msg.extend(f"  {pkg}" for pkg in only_in_1)
+        if only_in_2:
+            msg.append(f"Packages only in {file2}:")
+            msg.extend(f"  {pkg}" for pkg in only_in_2)
+        # Print full context
+        full_msg = "\n".join(msg)
+        assert False, f"Missing or extra packages found:\n{full_msg}"
 
 
 
