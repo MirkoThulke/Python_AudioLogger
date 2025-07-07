@@ -94,7 +94,7 @@ pipeline {
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                  -H "Accept: application/vnd.github.v3+json" ^
                                  -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                 -d "{\"state\": \"pending\", \"context\": \"jenkins/build\", \"description\": \"Build started\"}"
+                                 -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
                             """
                         }
                     }
@@ -186,7 +186,7 @@ pipeline {
                             curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                  -H "Accept: application/vnd.github.v3+json" ^
                                  -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                 -d "{\"state\": \"success\", \"context\": \"jenkins/build\", \"description\": \"Build passed\"}"
+                                 -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
                         """
                     }
                 }
@@ -201,7 +201,7 @@ pipeline {
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                      -H "Accept: application/vnd.github.v3+json" ^
                                      -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                     -d "{\"state\": \"failure\", \"context\": \"jenkins/build\", \"description\": \"Build failure\"}"
+                                     -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
                             """
                         }
                 }
@@ -216,7 +216,7 @@ pipeline {
                                 curl -H "Authorization: token %GITHUB_TOKEN%" ^
                                      -H "Accept: application/vnd.github.v3+json" ^
                                      -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                     -d "{\"state\": \"neutral\", \"context\": \"jenkins/build\", \"description\": \"Python config actions pending\"}"
+                                     -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
                             """
                         }
                 }
