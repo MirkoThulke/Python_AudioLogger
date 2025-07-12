@@ -112,9 +112,18 @@ def calculate_snr(signal, noisy_signal):
     signal          = signal.astype(np.float32)
     noisy_signal    = noisy_signal.astype(np.float32)
     
-    noise = noisy_signal - signal
+    
+    corr = correlate(noisy_signal, signal)
+    delay_est = np.argmax(corr) - len(signal) + 1
 
-    signal_power = np.mean(signal ** 2)
+    # Align signals
+    aligned_filtered = noisy_signal[delay_est:]
+    aligned_clean = signal[:len(aligned_filtered)]
+
+
+    noise = aligned_filtered - aligned_clean
+
+    signal_power = np.mean(aligned_clean ** 2)
     noise_power = np.mean(noise ** 2)
     
     epsilon = 1e-10  # Small constant to avoid divide-by-zero or log(0)
