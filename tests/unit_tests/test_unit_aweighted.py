@@ -18,8 +18,8 @@ import Python_AudioLogger
 from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
-from Python_AudioLogger import RATE, SAMPLE_SIZE, CHANNELS, CHUNK, STOPBAND_ATTEN, CUTOFF, LOWPASS_INIT_STATE
-from Python_AudioLogger import apply_low_pass, apply_a_weighting
+from Python_AudioLogger import RATE, SAMPLE_SIZE, CHANNELS, CHUNK
+from Python_AudioLogger import apply_a_weighting
 from endolith_weighting_filters import A_weight, A_weighting
 
 
@@ -137,7 +137,7 @@ class UnitTest_AWeighting(unittest.TestCase):
             self.chunk_index_i,
             self.is_recording,
             self.is_logging,
-            self.is_lowpass,
+            self.is_aweighted,
             self.system_calibration_factor_94db,
             self.frames,
             self.frames_filtered,
@@ -179,9 +179,9 @@ class UnitTest_AWeighting(unittest.TestCase):
         plt.axvline(100, color='blue', linestyle='--', label='100 Hz Frequency')
         plt.axvline(1000, color='green', linestyle='--', label='1000 Hz Frequency')
         plt.axvline(1600, color='red', linestyle='--', label='1600 Hz Frequency')
-        plt.axhline(AWEIGHT_DB_100, color='black', linestyle='--', label=f"{AWEIGHT_DB_100:.2f} dB")
-        plt.axhline(AWEIGHT_DB_1000, color='black', linestyle='--', label=f"{AWEIGHT_DB_1000:.2f} dB")
-        plt.axhline(AWEIGHT_DB_1600, color='black', linestyle='--', label=f"{AWEIGHT_DB_1600:.2f} dB")
+        plt.axhline(AWEIGHT_DB_100, color='blue', linestyle='--', label=f"{AWEIGHT_DB_100:.2f} dB")
+        plt.axhline(AWEIGHT_DB_1000, color='green', linestyle='--', label=f"{AWEIGHT_DB_1000:.2f} dB")
+        plt.axhline(AWEIGHT_DB_1600, color='red', linestyle='--', label=f"{AWEIGHT_DB_1600:.2f} dB")
         plt.legend()
         plt.savefig("filter_response_aweight.png", dpi=300)
         plt.close()
@@ -249,14 +249,13 @@ class UnitTest_AWeighting(unittest.TestCase):
 
         
 
-    # a) Check if the minimum attention within the stop band matchs the filter parameter specification.
-    # b) Check if the attenuation within the passband is within acceptable limits.
-    # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
+    # a) Check if the minimum attention at specific requencies matches the filter parameter specification.
+    # b) Print filter gain at specific frequency eg. 100Hz and 1000Hz.
     def test_Unit_02_Check_AWeighted_Check_withSinus(self):
 
         result_gain_100hz   = False
         result_gain_1000hz  = False
-        result_filter_init  = False
+
         
             
             
@@ -304,15 +303,15 @@ class UnitTest_AWeighting(unittest.TestCase):
         df = pd.DataFrame({
             'self.sinus_100hz_s16': self.sinus_100hz_s16,
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
-            'lowpass_array_1000hz': aweighted_array_1000hz,
+            'aweighted_array_1000hz': aweighted_array_1000hz,
             'time': time
         })
 
         # Write to Excel
-        df.to_excel('test_Unit_02.xlsx', index=False)
+        df.to_excel('test_Unit_aweighted_02.xlsx', index=False)
     
     
-        print(f"test_Unit_02:\n")
+        print(f"test_Unit_aweighted_02:\n")
         print(f"aweighted_gain_100hz: {aweighted_gain_100hz:.2f}")
         print(f"aweighted_gain_1000hz: {aweighted_gain_1000hz:.2f}") 
         print(f"result_gain_100hz: {result_gain_100hz}")
@@ -325,11 +324,12 @@ class UnitTest_AWeighting(unittest.TestCase):
         self.assertTrue(result, "test_Unit_aweighted_02 : Expected result to be True")
     
     
-    # a) Calculate SNR for a specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
-    # b) Check if the specified filter attentuation is met
+    # a) Calculate SNR for a specific frequency eg. 100Hz and 1000Hz.
+    # b) Check if the Signal to noise ratio is low
+    # c) This test is performed on one chunk of signal, hence the filter initialisation state has a signficant impact
     def test_Unit_03_Check_AWeighted_CheckAudioOutput_OneChunk(self):
-        result_SNA_oneChunk_100hz_dB = False
-        result_SNA_oneChunk_1000hz_dB = False
+        result_SNR_oneChunk_100hz_dB = False
+        result_SNR_oneChunk_1000hz_dB = False
         
  
         test_chunk_duration = CHUNK / RATE
@@ -337,49 +337,49 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
         self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1e-10)
+
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
 
-        lowpass_array_100hz   = apply_a_weighting(self.data_dictionary)
+        aweighted_array_100hz   = apply_a_weighting(self.data_dictionary)
 
 
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
 
-        lowpass_array_1000hz   = apply_a_weighting(self.data_dictionary)
+        aweighted_array_1000hz   = apply_a_weighting(self.data_dictionary)
         
 
-        SNA_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
-        SNA_oneChunk_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
+        SNR_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, aweighted_array_100hz)
+        SNR_oneChunk_1000hz_dB   = calculate_snr(self.sinus_1000hz_s16, aweighted_array_1000hz)
         
-        if 1.0 >=SNA_oneChunk_100hz_dB >= -1.0 :
-            result_SNA_oneChunk_100hz_dB = True
-        if SNA_oneChunk_1000hz_dB <= -80.0 :
-            result_SNA_oneChunk_1000hz_dB = True
+        if -5.0 <=SNR_oneChunk_100hz_dB <= 5.0 :
+            result_SNR_oneChunk_100hz_dB = True
+        if -5.0 <=SNR_oneChunk_1000hz_dB <= 5.0 :
+            result_SNR_oneChunk_1000hz_dB = True
         
 
           
         # Put into a DataFrame
         df = pd.DataFrame([{
-            'SNA_oneChunk_100hz_dB': SNA_oneChunk_100hz_dB,
-            'SNA_oneChunk_1000hz_dB': SNA_oneChunk_1000hz_dB
+            'SNR_oneChunk_100hz_dB': SNR_oneChunk_100hz_dB,
+            'SNR_oneChunk_1000hz_dB': SNR_oneChunk_1000hz_dB
         }])
 
         # Write to Excel
-        df.to_excel('test_Unit_03.xlsx', index=False)
+        df.to_excel('test_Unit_aweighted_03.xlsx', index=False)
 
 
-        print(f"test_Unit_03:\n")       
-        print(f"SNA_oneChunk_100hz_dB: {SNA_oneChunk_100hz_dB:.2f}")
-        print(f"SNA_oneChunk_1000hz_dB: {SNA_oneChunk_1000hz_dB:.2f}")       
-        print(f"result_SNA_oneChunk_100hz_dB: {result_SNA_oneChunk_100hz_dB}")
-        print(f"result_SNA_oneChunk_1000hz_dB: {result_SNA_oneChunk_1000hz_dB}")  
+        print(f"test_Unit_aweighted_03:\n")       
+        print(f"SNR_oneChunk_100hz_dB: {SNR_oneChunk_100hz_dB:.2f}")
+        print(f"SNR_oneChunk_1000hz_dB: {SNR_oneChunk_1000hz_dB:.2f}")       
+        print(f"result_SNR_oneChunk_100hz_dB: {result_SNR_oneChunk_100hz_dB}")
+        print(f"result_SNR_oneChunk_1000hz_dB: {result_SNR_oneChunk_1000hz_dB}")  
         print("-----------------\n")
         print("\n")
 
-        result = result_SNA_oneChunk_100hz_dB and result_SNA_oneChunk_1000hz_dB
+        result = result_SNR_oneChunk_100hz_dB and result_SNR_oneChunk_1000hz_dB
          
-        self.assertTrue(result, "test_Unit_03 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_aweighted_03 : Expected result to be True")
     
 
     # a) Treat signal chunkwise, to test for artefacts due to errors in filter state losses etc.
@@ -387,8 +387,8 @@ class UnitTest_AWeighting(unittest.TestCase):
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
     def test_Unit_04_Check_AWeighted_CheckAudioOutput_appendChunks(self):
-        result_SNA_100hz_dB     = False
-        result_SNA_1000hz_dB    = False
+        result_SNR_100hz_dB     = False
+        result_SNR_1000hz_dB    = False
         
         chunk_duration = CHUNK / RATE
         
@@ -399,65 +399,63 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1.0)
         self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=1.0)
-        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1e-10)
+
         
-        # Simulate the chunk wise low pass filtering in order to detect noise due to transients etc.
+        # Simulate the chunk wise filtering in order to detect noise due to transients etc.
 
 
-        lowpass_chunks      = []
+        aweighted_chunks      = []
         filtered_chunk      = []
         i = 0
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
+
         
         for i in range(0, len(self.sinus_100hz_s16), CHUNK):        
             # Process the chunk
             self.data_dictionary['audio_data']  = self.sinus_100hz_s16[i:i+CHUNK]
-            filtered_chunk                      = apply_low_pass(self.data_dictionary)
-            lowpass_chunks.append(filtered_chunk)
+            filtered_chunk                      = apply_a_weighting(self.data_dictionary)
+            aweighted_chunks.append(filtered_chunk)
         
         # Join all filtered chunks into one array
-        lowpass_array_100hz = np.concatenate(lowpass_chunks)
+        aweighted_array_100hz = np.concatenate(aweighted_chunks)
 
 
 
-        lowpass_chunks          = []
+        aweighted_chunks          = []
         filtered_chunk          = []
         i = 0
         for i in range(0, len(self.sinus_1000hz_s16), CHUNK):        
             # Process the chunk
             self.data_dictionary['audio_data']  = self.sinus_1000hz_s16[i:i+CHUNK] 
-            filtered_chunk                      = apply_low_pass(self.data_dictionary)
-            lowpass_chunks.append(filtered_chunk)
+            filtered_chunk                      = apply_a_weighting(self.data_dictionary)
+            aweighted_chunks.append(filtered_chunk)
         
         # Join all filtered chunks into one array
-        lowpass_array_1000hz = np.concatenate(lowpass_chunks)
+        aweighted_array_1000hz = np.concatenate(aweighted_chunks)
         
         
-        SNA_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
-        SNA_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])
-        
-        if SNA_100hz_dB >= -5 :
-            result_SNA_100hz_dB = True
-        if SNA_1000hz_dB <= -80.0 :
-            result_SNA_1000hz_dB = True
+        SNR_100hz_dB    = calculate_snr(self.sinus_100hz_s16, aweighted_array_100hz[:len(self.sinus_100hz_s16)])
+        SNR_1000hz_dB   = calculate_snr(self.sinus_1000hz_s16, aweighted_array_1000hz[:len(self.sinus_1000hz_s16)])
         
 
+        
+        if -5.0 <=SNR_100hz_dB <= 5.0 :
+            result_SNR_100hz_dB = True
+        if -5.0 <=SNR_1000hz_dB <= 5.0 :
+            result_SNR_1000hz_dB = True
         
         
         # Put into a DataFrame
         df = pd.DataFrame([{
             'self.sinus_100hz_s16': self.sinus_100hz_s16,
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
-            'self.sinus_zero_s16': self.sinus_zero_s16,
-            'lowpass_array_100hz': lowpass_array_100hz,
-            'lowpass_array_1000hz': lowpass_array_1000hz,                        
-            'SNA_100hz_dB': SNA_100hz_dB,
-            'SNA_1000hz_dB': SNA_1000hz_dB
+            'aweighted_array_100hz': aweighted_array_100hz,
+            'aweighted_array_1000hz': aweighted_array_1000hz,                        
+            'SNR_100hz_dB': SNR_100hz_dB,
+            'SNR_1000hz_dB': SNR_1000hz_dB
         }])
 
         # Write to Excel
-        df.to_excel('test_Unit_04.xlsx', index=False)
+        df.to_excel('test_Unit_aweighted_04.xlsx', index=False)
 
 
         with wave.open('sinus_100hz_s16_unfiltered.wav', 'wb') as wf:
@@ -466,48 +464,64 @@ class UnitTest_AWeighting(unittest.TestCase):
             wf.setframerate(RATE)
             wf.writeframes(self.sinus_100hz_s16.tobytes())
 
-
-        with wave.open('lowpass_array_100hz.wav', 'wb') as wf:
+        with wave.open('sinus_1000hz_s16_unfiltered.wav', 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
             wf.setframerate(RATE)
-            wf.writeframes(lowpass_array_100hz.tobytes())
-
-
-        with wave.open('lowpass_array_1000hz.wav', 'wb') as wf:
+            wf.writeframes(self.sinus_1000hz_s16.tobytes())
+            
+        with wave.open('aweighted_array_100hz.wav', 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
             wf.setframerate(RATE)
-            wf.writeframes(lowpass_array_1000hz.tobytes())
+            wf.writeframes(aweighted_array_100hz.tobytes())
+
+
+        with wave.open('aweighted_array_1000hz.wav', 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
+            wf.setframerate(RATE)
+            wf.writeframes(aweighted_array_1000hz.tobytes())
 
 
 
         plt.figure()
         plt.plot(time[:8000], self.sinus_100hz_s16[:8000], color='blue', label='sinus_100hz_s16')
-        plt.plot(time[:8000], lowpass_array_100hz[:8000], color='green', label='lowpass_array_100hz')
-        plt.plot(time[:8000], lowpass_array_1000hz[:8000], color='orange', label='lowpass_array_1000hz')
+        plt.plot(time[:8000], aweighted_array_100hz[:8000], color='green', label='aweighted_array_100hz')
         plt.xlabel('time')
         plt.legend()
-        plt.ylabel(f"pcm. LowPass Filtered with CutOff freq.: {CUTOFF} ")
+        plt.ylabel(f"pcm a-weighted 100 Hz ")
         plt.grid(True, which='both', linestyle='--', linewidth=0.1)
-        plt.savefig("self.sinus100hz_LowPass100hz_LoPass1000hz_s16.png", dpi=600)
+        plt.savefig("self.sinus100hz_AWeighted100hz_s16.png", dpi=600)
+        plt.close()
+        
+        
+        plt.figure()
+        plt.plot(time[:8000], self.sinus_1000hz_s16[:8000], color='blue', label='sinus_1000hz_s16')
+        plt.plot(time[:8000], aweighted_array_1000hz[:8000], color='orange', label='aweighted_array_1000hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm a-weighted 1000 Hz  ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus1000hz_AWeighted1000hz_s16.png", dpi=600)
         plt.close()
 
 
-        print(f"test_Unit_04:\n")
+        print(f"test_Unit_aweighted_04:\n")
         print(f"Audio saved as {'sinus_100hz_s16_unfiltered.wav'}\n")
-        print(f"Audio saved as {'lowpass_filtered_100hz.wav'}\n")
-        print(f"Audio saved as {'lowpass_filtered_1000hz.wav'}\n")
-        print(f"SNA_100hz_dB: {SNA_100hz_dB:.2f}")
-        print(f"SNA_1000hz_dB: {SNA_1000hz_dB:.2f}")
-        print(f"result_SNA_100hz_dB: {result_SNA_100hz_dB}")
-        print(f"result_SNA_1000hz_dB: {result_SNA_1000hz_dB}")
+        print(f"Audio saved as {'sinus_1000hz_s16_unfiltered.wav'}\n")
+        print(f"Audio saved as {'aweighted_filtered_100hz.wav'}\n")
+        print(f"Audio saved as {'aweighted_filtered_1000hz.wav'}\n")
+        print(f"SNR_100hz_dB: {SNR_100hz_dB:.2f}")
+        print(f"SNR_1000hz_dB: {SNR_1000hz_dB:.2f}")
+        print(f"result_SNR_100hz_dB: {result_SNR_100hz_dB}")
+        print(f"result_SNR_1000hz_dB: {result_SNR_1000hz_dB}")
         print("-----------------\n")
         print("\n")
         
-        result = result_SNA_100hz_dB and result_SNA_1000hz_dB
+        result = result_SNR_100hz_dB and result_SNR_1000hz_dB
         
-        self.assertTrue(result, "test_Unit_04 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_aweighted_04 : Expected result to be True")
 
 
 

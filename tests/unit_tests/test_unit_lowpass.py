@@ -195,10 +195,10 @@ class UnitTest_LowPass(unittest.TestCase):
         })
 
         # Write to Excel
-        df.to_excel('test_Unit_01.xlsx', index=False)
+        df.to_excel('test_Unit_lowpass_01.xlsx', index=False)
         
         
-        print(f"test_Unit_01:")
+        print(f"test_lowpass_Unit_01:")
         print(f"frequencies[idx_cutoff]: {frequencies[idx_cutoff]}")
         print(f"H_cutoff_min_dB: {H_cutoff_min_dB:.2f}")
         print(f"H_dc_min_dB: {H_dc_min_dB:.2f}")
@@ -212,7 +212,7 @@ class UnitTest_LowPass(unittest.TestCase):
         
         result = result_freqOffset and result_H_passband and result_H_cutoff and result_H_dc 
         
-        self.assertTrue(result, "test_Unit_01 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_lowpass_01 : Expected result to be True")
         
 
         
@@ -283,10 +283,10 @@ class UnitTest_LowPass(unittest.TestCase):
         })
 
         # Write to Excel
-        df.to_excel('test_Unit_02.xlsx', index=False)
+        df.to_excel('test_Unit_lowpass_02.xlsx', index=False)
     
     
-        print(f"test_Unit_02:\n")
+        print(f"test_Unit_lowpass__02:\n")
         print(f"lowpass_gain_100hz: {lowpass_gain_100hz:.2f}")
         print(f"LOWPASS_INIT_STATE: {LOWPASS_INIT_STATE}")
         print(f"lowpass_gain_1000hz: {lowpass_gain_1000hz:.2f}") 
@@ -297,14 +297,14 @@ class UnitTest_LowPass(unittest.TestCase):
         
         result = result_filter_init and result_gain_100hz and result_gain_1000hz
         
-        self.assertTrue(result, "test_Unit_02 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_lowpass_02 : Expected result to be True")
     
     
     # a) Calculate SNR for a specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     # b) Check if the specified filter attentuation is met
     def test_Unit_03_Check_LowPass_CheckAudioOutput_OneChunk(self):
-        result_SNA_oneChunk_100hz_dB = False
-        result_SNA_oneChunk_1000hz_dB = False
+        result_SNR_oneChunk_100hz_dB = False
+        result_SNR_oneChunk_1000hz_dB = False
         
  
         test_chunk_duration = CHUNK / RATE
@@ -326,37 +326,37 @@ class UnitTest_LowPass(unittest.TestCase):
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
 
-        SNA_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
-        SNA_oneChunk_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
+        SNR_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
+        SNR_oneChunk_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
         
-        if 5.0 >=SNA_oneChunk_100hz_dB >= -5.0 :
-            result_SNA_oneChunk_100hz_dB = True
-        if SNA_oneChunk_1000hz_dB <= -80.0 :
-            result_SNA_oneChunk_1000hz_dB = True
+        if 5.0 >=SNR_oneChunk_100hz_dB >= -5.0 :
+            result_SNR_oneChunk_100hz_dB = True
+        if SNR_oneChunk_1000hz_dB <= -80.0 :
+            result_SNR_oneChunk_1000hz_dB = True
         
 
           
         # Put into a DataFrame
         df = pd.DataFrame([{
-            'SNA_oneChunk_100hz_dB': SNA_oneChunk_100hz_dB,
-            'SNA_oneChunk_1000hz_dB': SNA_oneChunk_1000hz_dB
+            'SNR_oneChunk_100hz_dB': SNR_oneChunk_100hz_dB,
+            'SNR_oneChunk_1000hz_dB': SNR_oneChunk_1000hz_dB
         }])
 
         # Write to Excel
-        df.to_excel('test_Unit_03.xlsx', index=False)
+        df.to_excel('test_Unit_lowpass_03.xlsx', index=False)
 
 
-        print(f"test_Unit_03:\n")       
-        print(f"SNA_oneChunk_100hz_dB: {SNA_oneChunk_100hz_dB:.2f}")
-        print(f"SNA_oneChunk_1000hz_dB: {SNA_oneChunk_1000hz_dB:.2f}")       
-        print(f"result_SNA_oneChunk_100hz_dB: {result_SNA_oneChunk_100hz_dB}")
-        print(f"result_SNA_oneChunk_1000hz_dB: {result_SNA_oneChunk_1000hz_dB}")  
+        print(f"test_Unit_lowpass_03:\n")       
+        print(f"SNR_oneChunk_100hz_dB: {SNR_oneChunk_100hz_dB:.2f}")
+        print(f"SNR_oneChunk_1000hz_dB: {SNR_oneChunk_1000hz_dB:.2f}")       
+        print(f"result_SNR_oneChunk_100hz_dB: {result_SNR_oneChunk_100hz_dB}")
+        print(f"result_SNR_oneChunk_1000hz_dB: {result_SNR_oneChunk_1000hz_dB}")  
         print("-----------------\n")
         print("\n")
 
-        result = result_SNA_oneChunk_100hz_dB and result_SNA_oneChunk_1000hz_dB
+        result = result_SNR_oneChunk_100hz_dB and result_SNR_oneChunk_1000hz_dB
          
-        self.assertTrue(result, "test_Unit_03 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_lowpass_03 : Expected result to be True")
     
 
     # a) Treat signal chunkwise, to test for artefacts due to errors in filter state losses etc.
@@ -364,8 +364,8 @@ class UnitTest_LowPass(unittest.TestCase):
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
     def test_Unit_04_Check_LowPass_CheckAudioOutput_appendChunks(self):
-        result_SNA_100hz_dB     = False
-        result_SNA_1000hz_dB    = False
+        result_SNR_100hz_dB     = False
+        result_SNR_1000hz_dB    = False
         
         chunk_duration = CHUNK / RATE
         
@@ -411,13 +411,13 @@ class UnitTest_LowPass(unittest.TestCase):
         lowpass_array_1000hz = np.concatenate(lowpass_chunks)
         
         
-        SNA_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
-        SNA_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])
+        SNR_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
+        SNR_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])
         
-        if SNA_100hz_dB >= -5 :
-            result_SNA_100hz_dB = True
-        if SNA_1000hz_dB <= -80.0 :
-            result_SNA_1000hz_dB = True
+        if SNR_100hz_dB >= -5 :
+            result_SNR_100hz_dB = True
+        if SNR_1000hz_dB <= -80.0 :
+            result_SNR_1000hz_dB = True
         
 
         
@@ -429,12 +429,12 @@ class UnitTest_LowPass(unittest.TestCase):
             'self.sinus_zero_s16': self.sinus_zero_s16,
             'lowpass_array_100hz': lowpass_array_100hz,
             'lowpass_array_1000hz': lowpass_array_1000hz,                        
-            'SNA_100hz_dB': SNA_100hz_dB,
-            'SNA_1000hz_dB': SNA_1000hz_dB
+            'SNR_100hz_dB': SNR_100hz_dB,
+            'SNR_1000hz_dB': SNR_1000hz_dB
         }])
 
         # Write to Excel
-        df.to_excel('test_Unit_04.xlsx', index=False)
+        df.to_excel('test_Unit_lowpass_04.xlsx', index=False)
 
 
         with wave.open('sinus_100hz_s16_unfiltered.wav', 'wb') as wf:
@@ -471,20 +471,20 @@ class UnitTest_LowPass(unittest.TestCase):
         plt.close()
 
 
-        print(f"test_Unit_04:\n")
-        print(f"Audio saved as {'sinus_100hz_s16_unfiltered.wav'}\n")
+        print(f"test_Unit_lowpass_04:\n")
+        print(f"Audio saved as {'Unit_lowpass_04_sinus_100hz_s16_unfiltered.wav'}\n")
         print(f"Audio saved as {'lowpass_filtered_100hz.wav'}\n")
         print(f"Audio saved as {'lowpass_filtered_1000hz.wav'}\n")
-        print(f"SNA_100hz_dB: {SNA_100hz_dB:.2f}")
-        print(f"SNA_1000hz_dB: {SNA_1000hz_dB:.2f}")
-        print(f"result_SNA_100hz_dB: {result_SNA_100hz_dB}")
-        print(f"result_SNA_1000hz_dB: {result_SNA_1000hz_dB}")
+        print(f"SNR_100hz_dB: {SNR_100hz_dB:.2f}")
+        print(f"SNR_1000hz_dB: {SNR_1000hz_dB:.2f}")
+        print(f"result_SNR_100hz_dB: {result_SNR_100hz_dB}")
+        print(f"result_SNR_1000hz_dB: {result_SNR_1000hz_dB}")
         print("-----------------\n")
         print("\n")
         
-        result = result_SNA_100hz_dB and result_SNA_1000hz_dB
+        result = result_SNR_100hz_dB and result_SNR_1000hz_dB
         
-        self.assertTrue(result, "test_Unit_04 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_lowpass_04 : Expected result to be True")
 
 
 
