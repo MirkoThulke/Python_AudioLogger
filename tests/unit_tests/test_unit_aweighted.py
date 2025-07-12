@@ -497,8 +497,8 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         
         plt.figure()
-        plt.plot(time[:8000], self.sinus_1000hz_s16[:8000], color='blue', label='sinus_1000hz_s16')
-        plt.plot(time[:8000], aweighted_array_1000hz[:8000], color='orange', label='aweighted_array_1000hz')
+        plt.plot(time[:2000], self.sinus_1000hz_s16[:2000], color='blue', label='sinus_1000hz_s16')
+        plt.plot(time[:2000], aweighted_array_1000hz[:2000], color='orange', label='aweighted_array_1000hz')
         plt.xlabel('time')
         plt.legend()
         plt.ylabel(f"pcm a-weighted 1000 Hz  ")
