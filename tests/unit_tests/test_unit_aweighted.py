@@ -3,27 +3,63 @@ import os
 import multiprocessing
 import sys
 import numpy as np
-from numpy import log10, pi
+from numpy import pi
 from scipy.signal import correlate
-from scipy.signal import cheby2, freqz, sosfilt, sosfreqz, sosfilt_zi
-
+from scipy.signal import freqz
 import matplotlib.pyplot as plt
 import pandas as pd
 import wave
 
-# Add the parent directory (i.e., one level up from `scripts/`)
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), r"C:\Programming\eclipse_workspace\Python_AudioLogger")))
+
+# Add the parent directory as relative path to import Python_AudioLogger and endolith_weighting_filters
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import Python_AudioLogger
 from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
-from Python_AudioLogger import apply_low_pass
-from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK, LOWPASS_INIT_STATE
-
-# define relative path ....
-os.path.join(os.path.dirname(__file__), '../..')
+from Python_AudioLogger import RATE, SAMPLE_SIZE, CHANNELS, CHUNK, STOPBAND_ATTEN, CUTOFF, LOWPASS_INIT_STATE
+from Python_AudioLogger import apply_low_pass, apply_a_weighting
 from endolith_weighting_filters import A_weight, A_weighting
+
+
+# A-Weighting Filter ATTENTUATION
+AWEIGHT_DB_6_3	    =	-19.0
+AWEIGHT_DB_8	    =	-77.6
+AWEIGHT_DB_10	    =	-70.4
+AWEIGHT_DB_12_5	    =	-63.6
+AWEIGHT_DB_16	    =	-56.4
+AWEIGHT_DB_20	    =	-50.4
+AWEIGHT_DB_25	    =	-44.8
+AWEIGHT_DB_31_5	    =	-39.5
+AWEIGHT_DB_40	    =	-34.5
+AWEIGHT_DB_50	    =	-30.3
+AWEIGHT_DB_63	    =	-26.2
+AWEIGHT_DB_80	    =	-22.4
+AWEIGHT_DB_100	    =	-19.1
+AWEIGHT_DB_125	    =	-16.2
+AWEIGHT_DB_160	    =	-13.2
+AWEIGHT_DB_200	    =	-10.8
+AWEIGHT_DB_250	    =	-8.7
+AWEIGHT_DB_315	    =	-6.6
+AWEIGHT_DB_400	    =	-4.8
+AWEIGHT_DB_500	    =	-3.2
+AWEIGHT_DB_630	    =	-1.9
+AWEIGHT_DB_800	    =	-0.8
+AWEIGHT_DB_1000	    =	0
+AWEIGHT_DB_1250	    =	0.6
+AWEIGHT_DB_1600	    =	1
+AWEIGHT_DB_2000	    =	1.2
+AWEIGHT_DB_2500	    =	1.3
+AWEIGHT_DB_3150	    =	1.2
+AWEIGHT_DB_4000	    =	1
+AWEIGHT_DB_5000	    =	0.6
+AWEIGHT_DB_6300	    =	-0.1
+AWEIGHT_DB_8000	    =	-1.1
+AWEIGHT_DB_10000    =	-2.5
+AWEIGHT_DB_12500	=	-4.3
+AWEIGHT_DB_16000	=	-6.7
+AWEIGHT_DB_20000	=	-9.3
 
 # Pytest section ########
 PASSED      = True
@@ -90,15 +126,12 @@ def calculate_snr(signal, noisy_signal):
 
 
 # ✅ TEST CLASS: always define outside `if __name__ == "__main__"`
-class UnitTest_LowPass(unittest.TestCase):
+class UnitTest_AWeighting(unittest.TestCase):
     def setUp(self):
         self.manager = create_shared_resource_manager()
         self.data_dictionary = create_process_local_common_datadictionary_definition(self.manager)
         
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
-
-        
+      
         (
             self._device_index,
             self.chunk_index_i,
@@ -123,22 +156,17 @@ class UnitTest_LowPass(unittest.TestCase):
     # a) Plot the frequency response for visual checks
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
-    def test_Unit_01_Check_LowPass_Check_TransferFunction(self):
-        global sos # import filter coeficients from function under test
-        result_H_cutoff     = False
-        result_H_passband   = False
-        result_H_dc         = False
-        result_freqOffset   = False
-
+    def test_Unit_01_Check_AWeighted_Check_TransferFunction(self):
+        result_H_100Hz          = False
+        result_H_1000Hz         = False
+        result_H_1600Hz         = False
         
-
         # Compute frequency response
         b, a = A_weighting(RATE)
-        frequencies = np.geomspace(10, RATE/2, 1000)
+        frequencies = np.geomspace(10, RATE/4, 1000)
         w = 2*pi * frequencies / RATE
         w, h = freqz(b, a, w)
-       
-        
+           
         
         # Plot on log x-axis
         plt.figure()
@@ -148,87 +176,83 @@ class UnitTest_LowPass(unittest.TestCase):
         plt.xlabel("Frequency [Hz] (log scale)")
         plt.ylabel("Amplitude [dB]")
         plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.axvline(CUTOFF, color='red', linestyle='--', label='Cutoff Frequency')
-        plt.axhline(-STOPBAND_ATTEN, color='green', linestyle='--', label='Stopband Attenuation')
+        plt.axvline(100, color='blue', linestyle='--', label='100 Hz Frequency')
+        plt.axvline(1000, color='green', linestyle='--', label='1000 Hz Frequency')
+        plt.axvline(1600, color='red', linestyle='--', label='1600 Hz Frequency')
+        plt.axhline(AWEIGHT_DB_100, color='black', linestyle='--', label=f"{AWEIGHT_DB_100:.2f} dB")
+        plt.axhline(AWEIGHT_DB_1000, color='black', linestyle='--', label=f"{AWEIGHT_DB_1000:.2f} dB")
+        plt.axhline(AWEIGHT_DB_1600, color='black', linestyle='--', label=f"{AWEIGHT_DB_1600:.2f} dB")
         plt.legend()
         plt.savefig("filter_response_aweight.png", dpi=300)
         plt.close()
         
         
-        # Find the index closest to normal_cutoff  
-        idx_cutoff = np.argmin(np.abs(frequencies - CUTOFF))
+        # Find the index closest to 100Hz  
+        idx_100Hz = np.argmin(np.abs(frequencies - 100))
 
-        # Check for minim attentiation inside stopband. Consider stop band + 10% offset. 
-        # because the specified attentuation is not yet reached at exactly Cutoff frequency 
-        idx_cutoffOffset = np.argmin(np.abs(frequencies - (CUTOFF*1.2)))
-
-
-        H_cutoff_min_dB        = 20 * np.log10(max(np.abs(h[idx_cutoffOffset:])))
-
-
-        # calculate min frency response at inside passband first section 0 hz to CutOFF/2
-        # Because the response starts to drop before CutOff
-        idx_dc_min = np.argmin(np.abs(frequencies - (CUTOFF/2)))
-        H_dc_min_dB            = 20 * np.log10(min(np.abs(h[0:idx_dc_min])))
-
-
-
-        # check frequency offset to cuttoff frequency
-        offset_prc = 100* frequencies[idx_cutoffOffset]/frequencies[idx_cutoff]
-        if 110 <= offset_prc <= 130 :
-            result_freqOffset = True
-
-        offset_prc = 100* frequencies[idx_dc_min]/frequencies[idx_cutoff]
-        if 30 <= offset_prc <= 80 :
-            result_H_passband = True
-
+        # Find the index closest to 1000Hz  
+        idx_1000Hz = np.argmin(np.abs(frequencies - 1000))
+    
+        # Find the index closest to 16000Hz  
+        idx_1600Hz = np.argmin(np.abs(frequencies - 1600))
+        
+        H_100Hz_dB          = 20 * np.log10(np.abs(h[idx_100Hz]))
+        H_1000Hz_dB         = 20 * np.log10(np.abs(h[idx_1000Hz]))
+        H_1600Hz_dB         = 20 * np.log10(np.abs(h[idx_1600Hz]))
 
         # check if attentuation is as expected at the specified cutt off frenquency
-        if H_cutoff_min_dB < -STOPBAND_ATTEN :
-            result_H_cutoff = True
+        if AWEIGHT_DB_100-0.1 < H_100Hz_dB < AWEIGHT_DB_100+0.1 :
+            result_H_100Hz = True
+        
+        # check if attentuation is as expected at the specified cutt off frenquency
+        if AWEIGHT_DB_1000-0.1 < H_1000Hz_dB < AWEIGHT_DB_1000+0.1 :
+            result_H_1000Hz = True
             
-        # check if attentuation is ZERO at 0 Hz
-        if -0.5 < H_dc_min_dB < 0.5 :
-            result_H_dc = True
+        # check if attentuation is as expected at the specified cutt off frenquency
+        if AWEIGHT_DB_1600-0.1 < H_1600Hz_dB < AWEIGHT_DB_1600+0.1 :
+            result_H_1600Hz = True
         
                 # Put into a DataFrame
         df = pd.DataFrame({
             'frequencies': frequencies,
             'h': h,
-            'frequencies[idx_cutoff]': frequencies[idx_cutoff],
-            'frequencies[idx_cutoffOffset]': frequencies[idx_cutoffOffset],
-            'H_dc_min_dB': H_dc_min_dB,
-            'H_cutoff_min_dB': H_cutoff_min_dB
+            'frequencies[idx_100Hz]': frequencies[idx_100Hz],
+            'frequencies[idx_1000Hz]': frequencies[idx_1000Hz],
+            'frequencies[idx_16000Hz]': frequencies[idx_1600Hz],
+            'H_1000Hz_dB': H_100Hz_dB,
+            'H_1000Hz_dB': H_1000Hz_dB,
+            'H_1000Hz_dB': H_1600Hz_dB
         })
 
         # Write to Excel
-        df.to_excel('test_Unit_01.xlsx', index=False)
+        df.to_excel('test_Unit_aweighted_01.xlsx', index=False)
         
         
-        print(f"test_Unit_01:")
-        print(f"frequencies[idx_cutoff]: {frequencies[idx_cutoff]}")
-        print(f"H_cutoff_min_dB: {H_cutoff_min_dB:.2f}")
-        print(f"H_dc_min_dB: {H_dc_min_dB:.2f}")
-        print(f"result_freqOffset: {result_freqOffset}")
-        print(f"result_H_passband: {result_H_passband}")
-        print(f"result_H_cutoff: {result_H_cutoff}")
-        print(f"result_H_dc: {result_H_dc}")
+        print(f"test_Unit_aweighted_01:")
+        print(f"frequencies[idx_100Hz]: {frequencies[idx_100Hz]}")
+        print(f"frequencies[idx_1000Hz]: {frequencies[idx_1000Hz]}")
+        print(f"frequencies[idx_1600Hz]: {frequencies[idx_1600Hz]}")
+        print(f"H_100Hz_dB: {H_100Hz_dB:.2f}")
+        print(f"H_1000Hz_dB: {H_1000Hz_dB:.2f}")
+        print(f"H_16000Hz_dB: {H_1600Hz_dB:.2f}")
+        print(f"result_H_100Hz: {result_H_100Hz}")
+        print(f"result_H_1000Hz: {result_H_1000Hz}")
+        print(f"result_H_16000Hz: {result_H_1600Hz}")
         print("-----------------\n")
         print("\n")
         
         
-        result = result_freqOffset and result_H_passband and result_H_cutoff and result_H_dc 
+        result = result_H_100Hz and result_H_1000Hz and result_H_1600Hz
         
-        self.assertTrue(result, "test_Unit_01 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_aweighted_01 : Expected result to be True")
         
 
-        
         
 
     # a) Check if the minimum attention within the stop band matchs the filter parameter specification.
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
-    def test_Unit_02_Check_LowPass_Check_withSinus(self):
+    def test_Unit_02_Check_AWeighted_Check_withSinus(self):
 
         result_gain_100hz   = False
         result_gain_1000hz  = False
@@ -245,39 +269,34 @@ class UnitTest_LowPass(unittest.TestCase):
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
         
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
+        aweighted_array_100hz   = apply_a_weighting(self.data_dictionary)
         
-        if  self.data_dictionary['lowpass_filter_state'].all()  != 0:
-            result_filter_init = True
-        
-        lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
         
         
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
         
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
-        lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
+        aweighted_array_1000hz   = apply_a_weighting(self.data_dictionary)
+        
         
         # Calculate energy
         unfiltered_energy_100hz     = signal_energy(self.sinus_100hz_s16)
-        lowpass_energy_100hz        = signal_energy(lowpass_array_100hz )
+        aweighted_energy_100hz        = signal_energy(aweighted_array_100hz )
         unfiltered_energy_1000hz    = signal_energy(self.sinus_1000hz_s16)
-        lowpass_energy_1000hz       = signal_energy(lowpass_array_1000hz )
+        aweighted_energy_1000hz       = signal_energy(aweighted_array_1000hz )
         
         # Calculate gain
-        lowpass_gain_100hz =   10 * np.log10(lowpass_energy_100hz / unfiltered_energy_100hz)
-        lowpass_gain_1000hz =  10 * np.log10(lowpass_energy_1000hz / unfiltered_energy_1000hz)
+        aweighted_gain_100hz =   10 * np.log10(aweighted_energy_100hz / unfiltered_energy_100hz)
+        aweighted_gain_1000hz =  10 * np.log10(aweighted_energy_1000hz / unfiltered_energy_1000hz)
         
         
-        # expected gain to be close to zero+ tolerance
-        if -7 <= lowpass_gain_100hz <= 7 :
+        # expected gain to be inside tolerance
+        if -20 <= aweighted_gain_100hz <= -18 :
             result_gain_100hz = True
-            
-        # expected gain to be arround expected attentuation + tolerance
-        if lowpass_gain_1000hz <= -20 :
+        
+                # expected gain to be inside tolerance
+        if -1 <= aweighted_gain_1000hz <= 1:
             result_gain_1000hz = True
+             
         
         
         
@@ -285,7 +304,7 @@ class UnitTest_LowPass(unittest.TestCase):
         df = pd.DataFrame({
             'self.sinus_100hz_s16': self.sinus_100hz_s16,
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
-            'lowpass_array_1000hz': lowpass_array_1000hz,
+            'lowpass_array_1000hz': aweighted_array_1000hz,
             'time': time
         })
 
@@ -294,22 +313,21 @@ class UnitTest_LowPass(unittest.TestCase):
     
     
         print(f"test_Unit_02:\n")
-        print(f"lowpass_gain_100hz: {lowpass_gain_100hz:.2f}")
-        print(f"LOWPASS_INIT_STATE: {LOWPASS_INIT_STATE}")
-        print(f"lowpass_gain_1000hz: {lowpass_gain_1000hz:.2f}") 
+        print(f"aweighted_gain_100hz: {aweighted_gain_100hz:.2f}")
+        print(f"aweighted_gain_1000hz: {aweighted_gain_1000hz:.2f}") 
         print(f"result_gain_100hz: {result_gain_100hz}")
         print(f"result_gain_1000hz: {result_gain_1000hz}")
         print("-----------------\n")
         print("\n")
         
-        result = result_filter_init and result_gain_100hz and result_gain_1000hz
+        result =  result_gain_100hz and result_gain_1000hz
         
-        self.assertTrue(result, "test_Unit_02 : Expected result to be True")
+        self.assertTrue(result, "test_Unit_aweighted_02 : Expected result to be True")
     
     
     # a) Calculate SNR for a specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     # b) Check if the specified filter attentuation is met
-    def test_Unit_03_Check_LowPass_CheckAudioOutput_OneChunk(self):
+    def test_Unit_03_Check_AWeighted_CheckAudioOutput_OneChunk(self):
         result_SNA_oneChunk_100hz_dB = False
         result_SNA_oneChunk_1000hz_dB = False
         
@@ -322,21 +340,19 @@ class UnitTest_LowPass(unittest.TestCase):
         self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1e-10)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
-        lowpass_array_100hz   = apply_low_pass(self.data_dictionary)
+
+        lowpass_array_100hz   = apply_a_weighting(self.data_dictionary)
 
 
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
-        # initialse lowpass filter state
-        self.data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
-        lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
+
+        lowpass_array_1000hz   = apply_a_weighting(self.data_dictionary)
         
 
         SNA_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
         SNA_oneChunk_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
         
-        if 5.0 >=SNA_oneChunk_100hz_dB >= -5.0 :
+        if 1.0 >=SNA_oneChunk_100hz_dB >= -1.0 :
             result_SNA_oneChunk_100hz_dB = True
         if SNA_oneChunk_1000hz_dB <= -80.0 :
             result_SNA_oneChunk_1000hz_dB = True
@@ -370,7 +386,7 @@ class UnitTest_LowPass(unittest.TestCase):
     # b) Calculate SNR again over complete joint signal
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
-    def test_Unit_04_Check_LowPass_CheckAudioOutput_appendChunks(self):
+    def test_Unit_04_Check_AWeighted_CheckAudioOutput_appendChunks(self):
         result_SNA_100hz_dB     = False
         result_SNA_1000hz_dB    = False
         

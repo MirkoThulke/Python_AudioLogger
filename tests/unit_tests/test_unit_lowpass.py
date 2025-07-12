@@ -3,14 +3,16 @@ import os
 import multiprocessing
 import sys
 import numpy as np
+from numpy import pi
 from scipy.signal import correlate
 from scipy.signal import cheby2, freqz, sosfilt, sosfreqz, sosfilt_zi
 import matplotlib.pyplot as plt
 import pandas as pd
 import wave
 
-# Add the parent directory (i.e., one level up from `scripts/`)
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), r"C:\Programming\eclipse_workspace\Python_AudioLogger")))
+
+# Add the parent directory as relative path to import Python_AudioLogger 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import Python_AudioLogger
 from Python_AudioLogger import create_shared_resource_manager

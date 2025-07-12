@@ -142,6 +142,7 @@ pipeline {
 
                 script {
                     def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
+                    def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py', returnStatus: true)
                 }
             } 
         }
