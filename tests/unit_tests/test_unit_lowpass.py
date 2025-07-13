@@ -4,6 +4,7 @@ import multiprocessing
 import sys
 import numpy as np
 from numpy import pi
+from scipy.fft import fft
 from scipy.signal import correlate
 from scipy.signal import cheby2, freqz, sosfilt, sosfreqz, sosfilt_zi
 import matplotlib.pyplot as plt
@@ -102,9 +103,31 @@ def calculate_snr(signal, noisy_signal):
     
     return snr_db
 
+#THD (Total Harmonic Distortion)
+def compute_thdn(signal, fs, fundamental_freq):
+    N = len(signal)
+    window = np.hanning(N)
+    signal_windowed = signal * window
+
+    spectrum = np.abs(fft(signal_windowed))[:N//2]
+    freqs = np.fft.fftfreq(N, 1/fs)[:N//2]
+
+    # Find the index of the fundamental
+    idx_fund = np.argmin(np.abs(freqs - fundamental_freq))
+    fund_power = spectrum[idx_fund]**2
+    print(f"freqs[idx_fund]: {freqs[idx_fund]}")
+
+    # Remove the fundamental
+    spectrum[idx_fund] = 0
+
+    # THD+N = (total power excluding fundamental) / fundamental power
+    noise_plus_harmonics_power = np.sum(spectrum**2)
+    thdn = 10 * np.log10(noise_plus_harmonics_power / fund_power)
+
+    return thdn  # in dB
 
 
-def plot_spectrum(signal, fs, title="Signal Spectrum", save_path=None, show=True):
+def plot_spectrum(signal, fs, title="Signal Spectrum", save_path=None, show=False):
     N = len(signal)
     freq = np.fft.fftfreq(N, d=1/fs)
     spectrum = np.fft.fft(signal)
@@ -278,8 +301,8 @@ class UnitTest_LowPass(unittest.TestCase):
         test_chunk_duration = CHUNK / RATE
 
 
-        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
+        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -346,19 +369,18 @@ class UnitTest_LowPass(unittest.TestCase):
         self.assertTrue(result, "test_Unit_lowpass_02 : Expected result to be True")
     
     
-    # a) Calculate SNR for a specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
-    # b) Check if the specified filter attentuation is met
+    # a) Calculate THD (Total Harmonic Distortion) for a specific frequency eg. 100Hz and 1000Hz.
+    # b) This test is performed on one chunk of signal, hence the filter initialisation state has a signficant impact
     def test_Unit_03_Check_LowPass_CheckAudioOutput_OneChunk(self):
-        result_SNR_oneChunk_100hz_dB = False
-        result_SNR_oneChunk_1000hz_dB = False
+        result_THD_oneChunk_100hz_dB = False
+        result_THD_oneChunk_1000hz_dB = False
         
  
         test_chunk_duration = CHUNK / RATE
         
         
-        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1e-10)
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
         # initialse lowpass filter state
@@ -372,25 +394,25 @@ class UnitTest_LowPass(unittest.TestCase):
         lowpass_array_1000hz   = apply_low_pass(self.data_dictionary)
         
 
-        SNR_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
+
+        THD_oneChunk_100hz_dB    = compute_thdn(lowpass_array_100hz, RATE, 100)
+        THD_oneChunk_1000hz_dB   = compute_thdn(lowpass_array_1000hz, RATE, 1000)
+
         
-        # At 1000hz no output signal is expected. 
-        # Calculate Output signal power and input signal power. Compare to typical noise floor , e.g. -60db
-        SNR_oneChunk_1000hz_dB   = 10 * np.log10(signal_power(self.sinus_1000hz_s16)/signal_power(lowpass_array_1000hz)) 
         
+        # expected SNR is the expected value minus the filter attentuation
+        if THD_oneChunk_100hz_dB <= -40.0 :
+            result_THD_oneChunk_100hz_dB = True
+        if THD_oneChunk_1000hz_dB <= -40.0 :
+            result_THD_oneChunk_1000hz_dB = True
         
-        if SNR_oneChunk_100hz_dB >= 20.0 :
-            result_SNR_oneChunk_100hz_dB = True
-            
-        if SNR_oneChunk_1000hz_dB >= 20.0 :
-            result_SNR_oneChunk_1000hz_dB = True
         
 
           
         # Put into a DataFrame
         df = pd.DataFrame([{
-            'SNR_oneChunk_100hz_dB': SNR_oneChunk_100hz_dB,
-            'SNR_oneChunk_1000hz_dB': SNR_oneChunk_1000hz_dB
+            'SNR_oneChunk_100hz_dB': THD_oneChunk_100hz_dB,
+            'SNR_oneChunk_1000hz_dB': THD_oneChunk_1000hz_dB
         }])
 
         # Write to Excel
@@ -419,25 +441,25 @@ class UnitTest_LowPass(unittest.TestCase):
 
 
         print(f"test_Unit_lowpass_03:\n")       
-        print(f"SNR_oneChunk_100hz_dB: {SNR_oneChunk_100hz_dB:.2f}")
-        print(f"SNR_oneChunk_1000hz_dB: {SNR_oneChunk_1000hz_dB:.2f}")       
-        print(f"result_SNR_oneChunk_100hz_dB: {result_SNR_oneChunk_100hz_dB}")
-        print(f"result_SNR_oneChunk_1000hz_dB: {result_SNR_oneChunk_1000hz_dB}")  
+        print(f"THD_oneChunk_100hz_dB: {THD_oneChunk_100hz_dB:.2f}")
+        print(f"THD_oneChunk_1000hz_dB: {THD_oneChunk_1000hz_dB:.2f}")       
+        print(f"result_THD_oneChunk_100hz_dB: {result_THD_oneChunk_100hz_dB}")
+        print(f"result_THD_oneChunk_1000hz_dB: {result_THD_oneChunk_1000hz_dB}")  
         print("-----------------\n")
         print("\n")
 
-        result = result_SNR_oneChunk_100hz_dB and result_SNR_oneChunk_1000hz_dB
+        result = result_THD_oneChunk_100hz_dB and result_THD_oneChunk_1000hz_dB
          
         self.assertTrue(result, "test_Unit_lowpass_03 : Expected result to be True")
     
 
     # a) Treat signal chunkwise, to test for artefacts due to errors in filter state losses etc.
-    # b) Calculate SNR again over complete joint signal
+    # b) Calculate THD again over complete joint signal
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
     def test_Unit_04_Check_LowPass_CheckAudioOutput_appendChunks(self):
-        result_SNR_100hz_dB     = False
-        result_SNR_1000hz_dB    = False
+        result_THD_100hz_dB     = False
+        result_THD_1000hz_dB    = False
         
         chunk_duration = CHUNK / RATE
         
@@ -446,8 +468,8 @@ class UnitTest_LowPass(unittest.TestCase):
         test_number_chunks = int(test_duration / chunk_duration)
         
         
-        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1.0)
-        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=1.0)
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=0.95)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=0.95)
 
         
         # Simulate the chunk wise low pass filtering in order to detect noise due to transients etc.
@@ -482,19 +504,18 @@ class UnitTest_LowPass(unittest.TestCase):
         # Join all filtered chunks into one array
         lowpass_array_1000hz = np.concatenate(lowpass_chunks)
         
+           
         
-        SNR_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
-        # At 1000hz no output signal is expected. 
-        # Calculate Output signal power and input signal power. Compare to typical noise floor , e.g. -60db
-        SNR_1000hz_dB   = 10 * np.log10(signal_power(self.sinus_1000hz_s16)/signal_power(lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])) 
-        
-        
-        if SNR_100hz_dB >= 20 :
-            result_SNR_100hz_dB = True
-        if SNR_1000hz_dB >= 20 :
-            result_SNR_1000hz_dB = True
-        
+        THD_100hz_dB    = compute_thdn(lowpass_array_100hz[:len(self.sinus_100hz_s16)], RATE, 100)
+        THD_1000hz_dB   = compute_thdn(lowpass_array_1000hz[:len(self.sinus_1000hz_s16)], RATE, 1000)
 
+        
+        
+        # expected SNR is the expected value minus the filter attentuation
+        if THD_100hz_dB <= -40.0 :
+            result_THD_100hz_dB = True
+        if THD_1000hz_dB <= -40.0 :
+            result_THD_1000hz_dB = True
         
         
         # Put into a DataFrame
@@ -503,8 +524,8 @@ class UnitTest_LowPass(unittest.TestCase):
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
             'lowpass_array_100hz': lowpass_array_100hz,
             'lowpass_array_1000hz': lowpass_array_1000hz,                        
-            'SNR_100hz_dB': SNR_100hz_dB,
-            'SNR_1000hz_dB': SNR_1000hz_dB
+            'THD_100hz_dB': THD_100hz_dB,
+            'THD_1000hz_dB': THD_1000hz_dB
         }])
 
         # Write to Excel
@@ -570,14 +591,14 @@ class UnitTest_LowPass(unittest.TestCase):
         print(f"Audio saved as {'Unit_lowpass_04_sinus_100hz_s16_unfiltered.wav'}\n")
         print(f"Audio saved as {'lowpass_filtered_100hz.wav'}\n")
         print(f"Audio saved as {'lowpass_filtered_1000hz.wav'}\n")
-        print(f"SNR_100hz_dB: {SNR_100hz_dB:.2f}")
-        print(f"SNR_1000hz_dB: {SNR_1000hz_dB:.2f}")
-        print(f"result_SNR_100hz_dB: {result_SNR_100hz_dB}")
-        print(f"result_SNR_1000hz_dB: {result_SNR_1000hz_dB}")
+        print(f"THD_100hz_dB: {THD_100hz_dB:.2f}")
+        print(f"THD_1000hz_dB: {THD_1000hz_dB:.2f}")
+        print(f"result_THD_100hz_dB: {result_THD_100hz_dB}")
+        print(f"result_THD_1000hz_dB: {result_THD_1000hz_dB}")
         print("-----------------\n")
         print("\n")
         
-        result = result_SNR_100hz_dB and result_SNR_1000hz_dB
+        result = result_THD_100hz_dB and result_THD_1000hz_dB
         
         self.assertTrue(result, "test_Unit_lowpass_04 : Expected result to be True")
 

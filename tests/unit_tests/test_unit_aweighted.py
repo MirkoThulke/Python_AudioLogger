@@ -3,6 +3,7 @@ import os
 import multiprocessing
 import sys
 import numpy as np
+from scipy.fft import fft
 from numpy import pi
 from scipy.signal import correlate
 from scipy.signal import freqz
@@ -131,8 +132,58 @@ def calculate_snr(signal, noisy_signal):
     snr = signal_power / (noise_power + epsilon)
     snr_db = 10 * np.log10(snr + epsilon)  # Ensure you also avoid log(0) here
     
+    
+       
     return snr_db
 
+#THD (Total Harmonic Distortion)
+def compute_thdn(signal, fs, fundamental_freq):
+    N = len(signal)
+    window = np.hanning(N)
+    signal_windowed = signal * window
+
+    spectrum = np.abs(fft(signal_windowed))[:N//2]
+    freqs = np.fft.fftfreq(N, 1/fs)[:N//2]
+
+    # Find the index of the fundamental
+    idx_fund = np.argmin(np.abs(freqs - fundamental_freq))
+    fund_power = spectrum[idx_fund]**2
+    print(f"freqs[idx_fund]: {freqs[idx_fund]}")
+    
+    # Remove the fundamental
+    spectrum[idx_fund] = 0
+
+    # THD+N = (total power excluding fundamental) / fundamental power
+    noise_plus_harmonics_power = np.sum(spectrum**2)
+    thdn = 10 * np.log10(noise_plus_harmonics_power / fund_power)
+
+    return thdn  # in dB
+
+
+def plot_spectrum(signal, fs, title="Signal Spectrum", save_path=None, show=False):
+    N = len(signal)
+    freq = np.fft.fftfreq(N, d=1/fs)
+    spectrum = np.fft.fft(signal)
+    magnitude = np.abs(spectrum) / N
+
+    half_N = N // 2
+    plt.figure(figsize=(10, 4))
+    plt.plot(freq[:half_N], 20 * np.log10(magnitude[:half_N] + 1e-12))  # avoid log(0)
+    plt.title(title)
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude (dB)')
+    plt.grid(True)
+    plt.tight_layout()
+    
+    # Save to file if a path is given
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+        print(f"Spectrum saved to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 # ✅ TEST CLASS: always define outside `if __name__ == "__main__"`
 class UnitTest_AWeighting(unittest.TestCase):
@@ -271,8 +322,8 @@ class UnitTest_AWeighting(unittest.TestCase):
         test_chunk_duration = CHUNK / RATE
 
 
-        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_100hz_s16,time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
+        self.sinus_1000hz_s16,time  = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
         
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -333,19 +384,18 @@ class UnitTest_AWeighting(unittest.TestCase):
         self.assertTrue(result, "test_Unit_aweighted_02 : Expected result to be True")
     
     
-    # a) Calculate SNR for a specific frequency eg. 100Hz and 1000Hz.
-    # b) Check if the Signal to noise ratio is low
-    # c) This test is performed on one chunk of signal, hence the filter initialisation state has a signficant impact
+    # a) Calculate THD (Total Harmonic Distortion) for a specific frequency eg. 100Hz and 1000Hz.
+    # b) This test is performed on one chunk of signal, hence the filter initialisation state has a signficant impact
     def test_Unit_03_Check_AWeighted_CheckAudioOutput_OneChunk(self):
-        result_SNR_oneChunk_100hz_dB = False
-        result_SNR_oneChunk_1000hz_dB = False
+        result_THD_oneChunk_100hz_dB = False
+        result_THD_oneChunk_1000hz_dB = False
         
  
         test_chunk_duration = CHUNK / RATE
         
         
-        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
-        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=1.0)
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_chunk_duration, amplitude=0.95)
 
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
@@ -358,20 +408,23 @@ class UnitTest_AWeighting(unittest.TestCase):
         aweighted_array_1000hz   = apply_a_weighting(self.data_dictionary)
         
 
-        SNR_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, aweighted_array_100hz)
-        SNR_oneChunk_1000hz_dB   = calculate_snr(self.sinus_1000hz_s16, aweighted_array_1000hz)
+        THD_oneChunk_100hz_dB    = compute_thdn(aweighted_array_100hz, RATE, 100)
+        THD_oneChunk_1000hz_dB   = compute_thdn(aweighted_array_1000hz, RATE, 1000)
+
         
-        if -5.0 <=SNR_oneChunk_100hz_dB <= 5.0 :
-            result_SNR_oneChunk_100hz_dB = True
-        if -5.0 <=SNR_oneChunk_1000hz_dB <= 5.0 :
-            result_SNR_oneChunk_1000hz_dB = True
+        
+        # expected SNR is the expected value minus the filter attentuation
+        if THD_oneChunk_100hz_dB <= -40.0 :
+            result_THD_oneChunk_100hz_dB = True
+        if THD_oneChunk_1000hz_dB <= -40.0 :
+            result_THD_oneChunk_1000hz_dB = True
         
 
           
         # Put into a DataFrame
         df = pd.DataFrame([{
-            'SNR_oneChunk_100hz_dB': SNR_oneChunk_100hz_dB,
-            'SNR_oneChunk_1000hz_dB': SNR_oneChunk_1000hz_dB
+            'THD_oneChunk_100hz_dB': THD_oneChunk_100hz_dB,
+            'THD_oneChunk_1000hz_dB': THD_oneChunk_1000hz_dB
         }])
 
         # Write to Excel
@@ -399,25 +452,25 @@ class UnitTest_AWeighting(unittest.TestCase):
         
 
         print(f"test_Unit_aweighted_03:\n")       
-        print(f"SNR_oneChunk_100hz_dB: {SNR_oneChunk_100hz_dB:.2f}")
-        print(f"SNR_oneChunk_1000hz_dB: {SNR_oneChunk_1000hz_dB:.2f}")       
-        print(f"result_SNR_oneChunk_100hz_dB: {result_SNR_oneChunk_100hz_dB}")
-        print(f"result_SNR_oneChunk_1000hz_dB: {result_SNR_oneChunk_1000hz_dB}")  
+        print(f"THD_oneChunk_100hz_dB: {THD_oneChunk_100hz_dB:.2f}")
+        print(f"THD_oneChunk_1000hz_dB: {THD_oneChunk_1000hz_dB:.2f}")       
+        print(f"result_THD_oneChunk_100hz_dB: {result_THD_oneChunk_100hz_dB}")
+        print(f"result_THD_oneChunk_1000hz_dB: {result_THD_oneChunk_1000hz_dB}")  
         print("-----------------\n")
         print("\n")
 
-        result = result_SNR_oneChunk_100hz_dB and result_SNR_oneChunk_1000hz_dB
+        result = result_THD_oneChunk_100hz_dB and result_THD_oneChunk_1000hz_dB
          
         self.assertTrue(result, "test_Unit_aweighted_03 : Expected result to be True")
     
 
     # a) Treat signal chunkwise, to test for artefacts due to errors in filter state losses etc.
-    # b) Calculate SNR again over complete joint signal
+    # b) Calculate THD again over complete joint signal
     # c) Plot unfiltered and filtered sinus and overlay signals
     # d) Save wave files to check by licening if noise is present in the filtered signals
     def test_Unit_04_Check_AWeighted_CheckAudioOutput_appendChunks(self):
-        result_SNR_100hz_dB     = False
-        result_SNR_1000hz_dB    = False
+        result_THD_100hz_dB     = False
+        result_THD_1000hz_dB    = False
         
         chunk_duration = CHUNK / RATE
         
@@ -426,8 +479,8 @@ class UnitTest_AWeighting(unittest.TestCase):
         test_number_chunks = int(test_duration / chunk_duration)
         
         
-        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1.0)
-        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=1.0)
+        self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=0.95)
+        self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=0.95)
 
         
         # Simulate the chunk wise filtering in order to detect noise due to transients etc.
@@ -462,16 +515,16 @@ class UnitTest_AWeighting(unittest.TestCase):
         aweighted_array_1000hz = np.concatenate(aweighted_chunks)
         
         
-        SNR_100hz_dB    = calculate_snr(self.sinus_100hz_s16, aweighted_array_100hz[:len(self.sinus_100hz_s16)])
-        SNR_1000hz_dB   = calculate_snr(self.sinus_1000hz_s16, aweighted_array_1000hz[:len(self.sinus_1000hz_s16)])
-        
+        THD_100hz_dB    = compute_thdn(aweighted_array_100hz[:len(self.sinus_100hz_s16)], RATE, 100)
+        THD_1000hz_dB   = compute_thdn(aweighted_array_1000hz[:len(self.sinus_1000hz_s16)], RATE, 1000)
 
         
-        if -5.0 <=SNR_100hz_dB <= 5.0 :
-            result_SNR_100hz_dB = True
-        if -5.0 <=SNR_1000hz_dB <= 5.0 :
-            result_SNR_1000hz_dB = True
         
+        # expected SNR is the expected value minus the filter attentuation
+        if THD_100hz_dB <= -40.0 :
+            result_THD_100hz_dB = True
+        if THD_1000hz_dB <= -40.0 :
+            result_THD_1000hz_dB = True
         
         # Put into a DataFrame
         df = pd.DataFrame([{
@@ -479,8 +532,8 @@ class UnitTest_AWeighting(unittest.TestCase):
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
             'aweighted_array_100hz': aweighted_array_100hz,
             'aweighted_array_1000hz': aweighted_array_1000hz,                        
-            'SNR_100hz_dB': SNR_100hz_dB,
-            'SNR_1000hz_dB': SNR_1000hz_dB
+            'THD_100hz_dB': THD_100hz_dB,
+            'THD_1000hz_dB': THD_1000hz_dB
         }])
 
         # Write to Excel
@@ -512,6 +565,9 @@ class UnitTest_AWeighting(unittest.TestCase):
             wf.setframerate(RATE)
             wf.writeframes(aweighted_array_1000hz.tobytes())
 
+        
+        plot_spectrum(aweighted_array_100hz, RATE, title="Signal Spectrum : aweighted_array_100hz", save_path="spectrum_aweighted100hz.png")
+        plot_spectrum(aweighted_array_1000hz, RATE, title="Signal Spectrum : aweighted_array_1000hz", save_path="spectrum_aweighted1000hz.png")       
 
 
         plt.figure()
@@ -541,14 +597,14 @@ class UnitTest_AWeighting(unittest.TestCase):
         print(f"Audio saved as {'sinus_1000hz_s16_unfiltered.wav'}\n")
         print(f"Audio saved as {'aweighted_filtered_100hz.wav'}\n")
         print(f"Audio saved as {'aweighted_filtered_1000hz.wav'}\n")
-        print(f"SNR_100hz_dB: {SNR_100hz_dB:.2f}")
-        print(f"SNR_1000hz_dB: {SNR_1000hz_dB:.2f}")
-        print(f"result_SNR_100hz_dB: {result_SNR_100hz_dB}")
-        print(f"result_SNR_1000hz_dB: {result_SNR_1000hz_dB}")
+        print(f"THD_100hz_dB: {THD_100hz_dB:.2f}")
+        print(f"THD_1000hz_dB: {THD_1000hz_dB:.2f}")
+        print(f"result_THD_100hz_dB: {result_THD_100hz_dB}")
+        print(f"result_THD_1000hz_dB: {result_THD_1000hz_dB}")
         print("-----------------\n")
         print("\n")
         
-        result = result_SNR_100hz_dB and result_SNR_1000hz_dB
+        result = result_THD_100hz_dB and result_THD_1000hz_dB
         
         self.assertTrue(result, "test_Unit_aweighted_04 : Expected result to be True")
 
