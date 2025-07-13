@@ -57,6 +57,13 @@ def signal_energy(signal):
     return energy
 
 
+def signal_power(signal):
+    
+    signal  = signal.astype(np.float64)
+    power   = np.mean(np.abs(signal)**2)
+    return power
+
+
 def signal_rms(signal):
     signal = signal.astype(np.float64)
     rms = np.sqrt(np.mean(signal**2))
@@ -85,8 +92,8 @@ def calculate_snr(signal, noisy_signal):
 
     noise = aligned_filtered - aligned_clean
 
-    signal_power = np.mean(aligned_clean ** 2)
-    noise_power = np.mean(noise ** 2)
+    signal_power    = np.mean(aligned_clean ** 2)
+    noise_power     = np.mean(noise ** 2)
     
     epsilon = 1e-10  # Small constant to avoid divide-by-zero or log(0)
 
@@ -94,6 +101,35 @@ def calculate_snr(signal, noisy_signal):
     snr_db = 10 * np.log10(snr + epsilon)  # Ensure you also avoid log(0) here
     
     return snr_db
+
+
+
+def plot_spectrum(signal, fs, title="Signal Spectrum", save_path=None, show=True):
+    N = len(signal)
+    freq = np.fft.fftfreq(N, d=1/fs)
+    spectrum = np.fft.fft(signal)
+    magnitude = np.abs(spectrum) / N
+
+    half_N = N // 2
+    plt.figure(figsize=(10, 4))
+    plt.plot(freq[:half_N], 20 * np.log10(magnitude[:half_N] + 1e-12))  # avoid log(0)
+    plt.title(title)
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude (dB)')
+    plt.grid(True)
+    plt.tight_layout()
+    
+    # Save to file if a path is given
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+        print(f"Spectrum saved to: {save_path}")
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+        
+        
 
 
 # ✅ TEST CLASS: always define outside `if __name__ == "__main__"`
@@ -337,11 +373,16 @@ class UnitTest_LowPass(unittest.TestCase):
         
 
         SNR_oneChunk_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz)
-        SNR_oneChunk_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz)
         
-        if 5.0 >=SNR_oneChunk_100hz_dB >= -5.0 :
+        # At 1000hz no output signal is expected. 
+        # Calculate Output signal power and input signal power. Compare to typical noise floor , e.g. -60db
+        SNR_oneChunk_1000hz_dB   = 10 * np.log10(signal_power(self.sinus_1000hz_s16)/signal_power(lowpass_array_1000hz)) 
+        
+        
+        if SNR_oneChunk_100hz_dB >= 20.0 :
             result_SNR_oneChunk_100hz_dB = True
-        if SNR_oneChunk_1000hz_dB <= -80.0 :
+            
+        if SNR_oneChunk_1000hz_dB >= 20.0 :
             result_SNR_oneChunk_1000hz_dB = True
         
 
@@ -354,6 +395,27 @@ class UnitTest_LowPass(unittest.TestCase):
 
         # Write to Excel
         df.to_excel('test_Unit_lowpass_03.xlsx', index=False)
+
+
+        plt.figure()
+        plt.plot(time, self.sinus_100hz_s16, color='blue', label='sinus_100hz_s16')
+        plt.plot(time, lowpass_array_100hz, color='orange', label='lowpass_array_100hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm lowpass 100 Hz - only one chunk ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus100hz_lowpass100hz_oneChunk_s16.png", dpi=600)
+        plt.close()
+        
+        plt.figure()
+        plt.plot(time, self.sinus_1000hz_s16, color='blue', label='sinus_1000hz_s16')
+        plt.plot(time, lowpass_array_1000hz, color='orange', label='lowpass_array_1000hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm lowpass 1000 Hz - only one chunk ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus1000hz_lowpass1000hz_oneChunk_s16.png", dpi=600)
+        plt.close()
 
 
         print(f"test_Unit_lowpass_03:\n")       
@@ -386,7 +448,7 @@ class UnitTest_LowPass(unittest.TestCase):
         
         self.sinus_100hz_s16, time  = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1.0)
         self.sinus_1000hz_s16, time = generate_sine_wave_bytes(frequency=1000, sample_rate=RATE, duration=test_duration, amplitude=1.0)
-        self.sinus_zero_s16, time   = generate_sine_wave_bytes(frequency=100, sample_rate=RATE, duration=test_duration, amplitude=1e-10)
+
         
         # Simulate the chunk wise low pass filtering in order to detect noise due to transients etc.
 
@@ -422,11 +484,14 @@ class UnitTest_LowPass(unittest.TestCase):
         
         
         SNR_100hz_dB    = calculate_snr(self.sinus_100hz_s16, lowpass_array_100hz[:len(self.sinus_100hz_s16)])
-        SNR_1000hz_dB   = calculate_snr(self.sinus_zero_s16, lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])
+        # At 1000hz no output signal is expected. 
+        # Calculate Output signal power and input signal power. Compare to typical noise floor , e.g. -60db
+        SNR_1000hz_dB   = 10 * np.log10(signal_power(self.sinus_1000hz_s16)/signal_power(lowpass_array_1000hz[:len(self.sinus_1000hz_s16)])) 
         
-        if SNR_100hz_dB >= -5 :
+        
+        if SNR_100hz_dB >= 20 :
             result_SNR_100hz_dB = True
-        if SNR_1000hz_dB <= -80.0 : # zero is expected , since the 
+        if SNR_1000hz_dB >= 20 :
             result_SNR_1000hz_dB = True
         
 
@@ -436,7 +501,6 @@ class UnitTest_LowPass(unittest.TestCase):
         df = pd.DataFrame([{
             'self.sinus_100hz_s16': self.sinus_100hz_s16,
             'self.sinus_1000hz_s16': self.sinus_1000hz_s16,
-            'self.sinus_zero_s16': self.sinus_zero_s16,
             'lowpass_array_100hz': lowpass_array_100hz,
             'lowpass_array_1000hz': lowpass_array_1000hz,                        
             'SNR_100hz_dB': SNR_100hz_dB,
@@ -454,6 +518,13 @@ class UnitTest_LowPass(unittest.TestCase):
             wf.writeframes(self.sinus_100hz_s16.tobytes())
 
 
+        with wave.open('sinus_1000hz_s16_unfiltered.wav', 'wb') as wf:
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
+            wf.setframerate(RATE)
+            wf.writeframes(self.sinus_1000hz_s16.tobytes())
+            
+            
         with wave.open('lowpass_array_100hz.wav', 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(SAMPLE_SIZE)  # SAMPLE_SIZE should be in bytes (e.g., 2 for int16)
@@ -468,16 +539,30 @@ class UnitTest_LowPass(unittest.TestCase):
             wf.writeframes(lowpass_array_1000hz.tobytes())
 
 
+        
+        plot_spectrum(lowpass_array_100hz, RATE, title="Signal Spectrum : lowpass_array_100hz", save_path="spectrum_lowpass100hz.png")
+        plot_spectrum(lowpass_array_1000hz, RATE, title="Signal Spectrum : lowpass_array_1000hz", save_path="spectrum_lowpass1000hz.png")       
+
 
         plt.figure()
         plt.plot(time[:8000], self.sinus_100hz_s16[:8000], color='blue', label='sinus_100hz_s16')
         plt.plot(time[:8000], lowpass_array_100hz[:8000], color='green', label='lowpass_array_100hz')
-        plt.plot(time[:8000], lowpass_array_1000hz[:8000], color='orange', label='lowpass_array_1000hz')
         plt.xlabel('time')
         plt.legend()
-        plt.ylabel(f"pcm. LowPass Filtered with CutOff freq.: {CUTOFF} ")
+        plt.ylabel(f"pcm. LowPass Filtered at 100Hz with CutOff freq.: {CUTOFF} ")
         plt.grid(True, which='both', linestyle='--', linewidth=0.1)
-        plt.savefig("self.sinus100hz_LowPass100hz_LoPass1000hz_s16.png", dpi=600)
+        plt.savefig("sinus100hz_lowpass100hz_s16.png", dpi=600)
+        plt.close()
+        
+        
+        plt.figure()
+        plt.plot(time[:2000], self.sinus_1000hz_s16[:2000], color='blue', label='sinus_1000hz_s16')
+        plt.plot(time[:2000], lowpass_array_1000hz[:2000], color='orange', label='lowpass_array_1000hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm. LowPass Filtered at 1000Hz with CutOff freq.: {CUTOFF} ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("sinus1000hz_lowpass1000hz_s16.png", dpi=600)
         plt.close()
 
 

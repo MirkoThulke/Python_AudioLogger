@@ -227,10 +227,10 @@ class UnitTest_AWeighting(unittest.TestCase):
             'h': h,
             'frequencies[idx_100Hz]': frequencies[idx_100Hz],
             'frequencies[idx_1000Hz]': frequencies[idx_1000Hz],
-            'frequencies[idx_16000Hz]': frequencies[idx_1600Hz],
-            'H_1000Hz_dB': H_100Hz_dB,
+            'frequencies[idx_1600Hz]': frequencies[idx_1600Hz],
+            'H_100Hz_dB': H_100Hz_dB,
             'H_1000Hz_dB': H_1000Hz_dB,
-            'H_1000Hz_dB': H_1600Hz_dB
+            'H_1600Hz_dB': H_1600Hz_dB
         })
 
         # Write to Excel
@@ -243,10 +243,10 @@ class UnitTest_AWeighting(unittest.TestCase):
         print(f"frequencies[idx_1600Hz]: {frequencies[idx_1600Hz]}")
         print(f"H_100Hz_dB: {H_100Hz_dB:.2f}")
         print(f"H_1000Hz_dB: {H_1000Hz_dB:.2f}")
-        print(f"H_16000Hz_dB: {H_1600Hz_dB:.2f}")
+        print(f"H_1600Hz_dB: {H_1600Hz_dB:.2f}")
         print(f"result_H_100Hz: {result_H_100Hz}")
         print(f"result_H_1000Hz: {result_H_1000Hz}")
-        print(f"result_H_16000Hz: {result_H_1600Hz}")
+        print(f"result_H_1600Hz: {result_H_1600Hz}")
         print("-----------------\n")
         print("\n")
         
@@ -287,10 +287,10 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         
         # Calculate energy
-        unfiltered_energy_100hz     = signal_energy(self.sinus_100hz_s16)
-        aweighted_energy_100hz        = signal_energy(aweighted_array_100hz )
-        unfiltered_energy_1000hz    = signal_energy(self.sinus_1000hz_s16)
-        aweighted_energy_1000hz       = signal_energy(aweighted_array_1000hz )
+        unfiltered_energy_100hz         = signal_energy(self.sinus_100hz_s16)
+        aweighted_energy_100hz          = signal_energy(aweighted_array_100hz )
+        unfiltered_energy_1000hz        = signal_energy(self.sinus_1000hz_s16)
+        aweighted_energy_1000hz         = signal_energy(aweighted_array_1000hz )
         
         # Calculate gain
         aweighted_gain_100hz =   10 * np.log10(aweighted_energy_100hz / unfiltered_energy_100hz)
@@ -377,6 +377,26 @@ class UnitTest_AWeighting(unittest.TestCase):
         # Write to Excel
         df.to_excel('test_Unit_aweighted_03.xlsx', index=False)
 
+        plt.figure()
+        plt.plot(time, self.sinus_100hz_s16, color='blue', label='sinus_100hz_s16')
+        plt.plot(time, aweighted_array_100hz, color='orange', label='aweighted_array_100hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm a-weighted 100 Hz - only one chunk ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus100hz_AWeighted100hz_oneChunk_s16.png", dpi=600)
+        plt.close()
+        
+        plt.figure()
+        plt.plot(time, self.sinus_1000hz_s16, color='blue', label='sinus_1000hz_s16')
+        plt.plot(time, aweighted_array_1000hz, color='orange', label='aweighted_array_1000hz')
+        plt.xlabel('time')
+        plt.legend()
+        plt.ylabel(f"pcm a-weighted 1000 Hz - only one chunk ")
+        plt.grid(True, which='both', linestyle='--', linewidth=0.1)
+        plt.savefig("self.sinus1000hz_AWeighted1000hz_oneChunk_s16.png", dpi=600)
+        plt.close()
+        
 
         print(f"test_Unit_aweighted_03:\n")       
         print(f"SNR_oneChunk_100hz_dB: {SNR_oneChunk_100hz_dB:.2f}")
