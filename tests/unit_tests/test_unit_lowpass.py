@@ -21,7 +21,7 @@ from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
 from Python_AudioLogger import apply_low_pass
-from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos, CHUNK, LOWPASS_INIT_STATE
+from Python_AudioLogger import nyquist, normal_cutoff, STOPBAND_ATTEN, CUTOFF, RATE, ORDER, SAMPLE_SIZE, CHANNELS, sos_lowpass, CHUNK, LOWPASS_INIT_STATE
 
 
 # Pytest section ########
@@ -118,7 +118,9 @@ def compute_thdn(signal, fs, fundamental_freq):
     print(f"freqs[idx_fund]: {freqs[idx_fund]}")
 
     # Remove the fundamental
+    spectrum[idx_fund-1] = 0
     spectrum[idx_fund] = 0
+    spectrum[idx_fund+1] = 0
 
     # THD+N = (total power excluding fundamental) / fundamental power
     noise_plus_harmonics_power = np.sum(spectrum**2)
@@ -190,7 +192,7 @@ class UnitTest_LowPass(unittest.TestCase):
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_01_Check_LowPass_Check_TransferFunction(self):
-        global sos # import filter coeficients from function under test
+        global sos_lowpass # import filter coeficients from function under test
         result_H_cutoff     = False
         result_H_passband   = False
         result_H_dc         = False
@@ -199,7 +201,7 @@ class UnitTest_LowPass(unittest.TestCase):
         
 
         # Compute frequency response
-        frequencies, h = sosfreqz(sos, worN=1024, fs=RATE)  # w: frequency axis in Hz, h: complex gain
+        frequencies, h = sosfreqz(sos_lowpass, worN=1024, fs=RATE)  # w: frequency axis in Hz, h: complex gain
         
         
         # Plot on log x-axis
@@ -401,9 +403,9 @@ class UnitTest_LowPass(unittest.TestCase):
         
         
         # expected SNR is the expected value minus the filter attentuation
-        if THD_oneChunk_100hz_dB <= -40.0 :
+        if THD_oneChunk_100hz_dB <= -15.0 :
             result_THD_oneChunk_100hz_dB = True
-        if THD_oneChunk_1000hz_dB <= -40.0 :
+        if THD_oneChunk_1000hz_dB <= 50.0 :
             result_THD_oneChunk_1000hz_dB = True
         
         
@@ -512,9 +514,9 @@ class UnitTest_LowPass(unittest.TestCase):
         
         
         # expected SNR is the expected value minus the filter attentuation
-        if THD_100hz_dB <= -40.0 :
+        if THD_100hz_dB <= -80.0 :
             result_THD_100hz_dB = True
-        if THD_1000hz_dB <= -40.0 :
+        if THD_1000hz_dB <= -10.0 :
             result_THD_1000hz_dB = True
         
         

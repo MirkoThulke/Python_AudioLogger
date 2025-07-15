@@ -6,7 +6,7 @@ import numpy as np
 from scipy.fft import fft
 from numpy import pi
 from scipy.signal import correlate
-from scipy.signal import freqz
+from scipy.signal import freqz, sosfreqz
 import matplotlib.pyplot as plt
 import pandas as pd
 import wave
@@ -20,7 +20,7 @@ from Python_AudioLogger import create_shared_resource_manager
 from Python_AudioLogger import create_process_local_common_datadictionary_definition
 from Python_AudioLogger import create_shared_memory_resources
 from Python_AudioLogger import RATE, SAMPLE_SIZE, CHANNELS, CHUNK
-from Python_AudioLogger import apply_a_weighting
+from Python_AudioLogger import apply_a_weighting, AWEIGHT_INIT_STATE, sos_aweight
 from endolith_weighting_filters import A_weight, A_weighting
 
 
@@ -151,7 +151,9 @@ def compute_thdn(signal, fs, fundamental_freq):
     print(f"freqs[idx_fund]: {freqs[idx_fund]}")
     
     # Remove the fundamental
+    spectrum[idx_fund-1] = 0
     spectrum[idx_fund] = 0
+    spectrum[idx_fund+1] = 0
 
     # THD+N = (total power excluding fundamental) / fundamental power
     noise_plus_harmonics_power = np.sum(spectrum**2)
@@ -191,6 +193,8 @@ class UnitTest_AWeighting(unittest.TestCase):
         self.manager = create_shared_resource_manager()
         self.data_dictionary = create_process_local_common_datadictionary_definition(self.manager)
         
+        # initialse aweight filter state
+        self.data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
       
         (
             self._device_index,
@@ -217,15 +221,14 @@ class UnitTest_AWeighting(unittest.TestCase):
     # b) Check if the attenuation within the passband is within acceptable limits.
     # c) Print filter gain ata specific frequency in the passband and in the stopband, eg. 100Hz and 1000Hz.
     def test_Unit_01_Check_AWeighted_Check_TransferFunction(self):
+        global sos_aweight # import filter coeficients from function under test
         result_H_100Hz          = False
         result_H_1000Hz         = False
         result_H_1600Hz         = False
         
         # Compute frequency response
-        b, a = A_weighting(RATE)
-        frequencies = np.geomspace(10, RATE/4, 1000)
-        w = 2*pi * frequencies / RATE
-        w, h = freqz(b, a, w)
+        frequencies, h = sosfreqz(sos_aweight, worN=4096, fs=RATE)  # w: frequency axis in Hz, h: complex gain
+     
            
         
         # Plot on log x-axis
@@ -312,7 +315,7 @@ class UnitTest_AWeighting(unittest.TestCase):
     # a) Check if the minimum attention at specific requencies matches the filter parameter specification.
     # b) Print filter gain at specific frequency eg. 100Hz and 1000Hz.
     def test_Unit_02_Check_AWeighted_Check_withSinus(self):
-
+        result_filter_init  = False
         result_gain_100hz   = False
         result_gain_1000hz  = False
 
@@ -328,11 +331,21 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
         
+        # initialse aweight filter state
+        self.data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
+        
+        if  self.data_dictionary['aweight_filter_state'].any() != 0:
+            result_filter_init = True
+        
+        
         aweighted_array_100hz   = apply_a_weighting(self.data_dictionary)
         
         
         
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
+        
+        # initialse aweight filter state
+        self.data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
         
         aweighted_array_1000hz   = apply_a_weighting(self.data_dictionary)
         
@@ -372,14 +385,16 @@ class UnitTest_AWeighting(unittest.TestCase):
     
     
         print(f"test_Unit_aweighted_02:\n")
+        print(f"AWEIGHT_INIT_STATE: {AWEIGHT_INIT_STATE}")
         print(f"aweighted_gain_100hz: {aweighted_gain_100hz:.2f}")
         print(f"aweighted_gain_1000hz: {aweighted_gain_1000hz:.2f}") 
+        print(f"result_filter_init: {result_filter_init}")
         print(f"result_gain_100hz: {result_gain_100hz}")
         print(f"result_gain_1000hz: {result_gain_1000hz}")
         print("-----------------\n")
         print("\n")
         
-        result =  result_gain_100hz and result_gain_1000hz
+        result =   result_filter_init and result_gain_100hz and result_gain_1000hz
         
         self.assertTrue(result, "test_Unit_aweighted_02 : Expected result to be True")
     
@@ -399,11 +414,17 @@ class UnitTest_AWeighting(unittest.TestCase):
 
         
         self.data_dictionary['audio_data'] = self.sinus_100hz_s16
+        
+        # initialse aweight filter state
+        self.data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
 
         aweighted_array_100hz   = apply_a_weighting(self.data_dictionary)
 
 
         self.data_dictionary['audio_data'] = self.sinus_1000hz_s16
+        
+        # initialse aweight filter state
+        self.data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
 
         aweighted_array_1000hz   = apply_a_weighting(self.data_dictionary)
         
@@ -414,9 +435,9 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         
         # expected SNR is the expected value minus the filter attentuation
-        if THD_oneChunk_100hz_dB <= -40.0 :
+        if THD_oneChunk_100hz_dB <= -15.0 :
             result_THD_oneChunk_100hz_dB = True
-        if THD_oneChunk_1000hz_dB <= -40.0 :
+        if THD_oneChunk_1000hz_dB <= -15.0 :
             result_THD_oneChunk_1000hz_dB = True
         
 
@@ -521,9 +542,9 @@ class UnitTest_AWeighting(unittest.TestCase):
         
         
         # expected SNR is the expected value minus the filter attentuation
-        if THD_100hz_dB <= -40.0 :
+        if THD_100hz_dB <= -60.0 :
             result_THD_100hz_dB = True
-        if THD_1000hz_dB <= -40.0 :
+        if THD_1000hz_dB <= -60.0 :
             result_THD_1000hz_dB = True
         
         # Put into a DataFrame

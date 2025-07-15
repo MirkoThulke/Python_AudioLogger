@@ -45,7 +45,7 @@ cmd> pip list --outdated
 '''
 import wx # click button GUI
 import pyaudio
-from endolith_weighting_filters import A_weight
+from endolith_weighting_filters import A_weighting, A_weight
 from scipy.signal import cheby2, sosfilt, sosfilt_zi
 import numpy as np
 import ctypes
@@ -137,11 +137,14 @@ nyquist = RATE / 2
 normal_cutoff = CUTOFF / nyquist
 
 # Define Lowpass filter parameters
-sos = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
+sos_lowpass = cheby2(N=ORDER, rs=STOPBAND_ATTEN, Wn=CUTOFF, btype='low', fs=RATE, output='sos')
+# Define Aweighting filter parameters
+sos_aweight = A_weighting(RATE, output='sos')
 
 # initialse filter state, # lowpass filter state  
-LOWPASS_INIT_STATE = sosfilt_zi(sos)
-
+LOWPASS_INIT_STATE = sosfilt_zi(sos_lowpass)
+# initialse filter state, # aweighting filter state
+AWEIGHT_INIT_STATE = sosfilt_zi(sos_aweight)
 
 # Global Variables NOT in shared memory #######################################
 
@@ -273,8 +276,11 @@ def func_on_button_setDevices_click(frame, _device_index):
 
 
 def func_on_button_selectFilter_click(self, event, is_lowpass):
+    global AWEIGHT_INIT_STATE
     global LOWPASS_INIT_STATE
     
+    # initialse aweightfilter state
+    data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
     # initialse lowpass filter state
     data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
     
@@ -289,18 +295,27 @@ def func_on_button_selectFilter_click(self, event, is_lowpass):
 
 
 def apply_a_weighting(data_dictionary):
-    """Apply the A-weighting filter to the signal"""
+    global sos_aweight
+    # print(f'sos_aweight: {sos_aweight}')
 
     
     # convert to float for filtering
-    float_array  = data_dictionary['audio_data'].astype(np.float32)
+    float_array                                 = data_dictionary['audio_data'].astype(np.float32)
     
+    #load filter state from previous chunk
+    aweight_filter_state                        = data_dictionary['aweight_filter_state'].astype(np.float32)
 
-    # Apply A-weighting
-    float_array_filt = A_weight(float_array, RATE)
+    # Apply Apply A-weighting. use sosfilt because chunkwise filtering is required.
+    # store filter state to avoid artefacts between chunks !!
+    float_array_filt, aweight_filter_state      = sosfilt(sos_aweight, float_array, zi=aweight_filter_state)
+
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
+    
+    
+    #store filter state for next chunk
+    data_dictionary['aweight_filter_state']    = aweight_filter_state
     
     #print(f'audio_data: {audio_data}')
     #print(f'float_array: {float_array}')
@@ -312,8 +327,8 @@ def apply_a_weighting(data_dictionary):
 
 def apply_low_pass(data_dictionary):
     #Chebyshev Type II low-pass filter
-    global sos
-    # print(f'sos: {sos}')
+    global sos_lowpass
+    # print(f'sos_lowpass: {sos_lowpass}')
 
     
     # convert to float for filtering
@@ -324,7 +339,7 @@ def apply_low_pass(data_dictionary):
 
     # Apply Low passfilter. use sosfilt because chunkwise filtering is required.
     # store filter state to avoid artefacts between chunks !!
-    float_array_filt, lowpass_filter_state     = sosfilt(sos, float_array, zi=lowpass_filter_state)
+    float_array_filt, lowpass_filter_state     = sosfilt(sos_lowpass, float_array, zi=lowpass_filter_state)
     
     #convert back to integer for further processing
     int_array   = float_array_filt.astype(np.int16)
@@ -421,6 +436,7 @@ def func_calc_SPL(data_dictionary, system_calibration_factor_94db, is_lowpass):
 
 
 def func_process_audio_input(data_dictionary, frames, frames_filtered, system_calibration_factor_94db, _device_index, chunk_index_i,chunk_noise_list_index,chunk_noise_list_spl, is_recording, recording_status_queue, recording_dba_queue, is_lowpass):
+    global AWEIGHT_INIT_STATE
     global LOWPASS_INIT_STATE
  
     #whole process will run in high priority mode
@@ -444,6 +460,8 @@ def func_process_audio_input(data_dictionary, frames, frames_filtered, system_ca
     frames_filtered[:] = [] # use clear, since it is a DataDictionary shared list.
     data = []
     
+    # initialse aweight filter state
+    data_dictionary['aweight_filter_state']    = AWEIGHT_INIT_STATE
     # initialse lowpass filter state
     data_dictionary['lowpass_filter_state']    = LOWPASS_INIT_STATE
     
@@ -1236,7 +1254,8 @@ def create_process_local_common_datadictionary_definition(manager):
     "audio_data": np.array([]),
     "a_weighted_signal": np.array([]),
     "lowpass_signal": np.array([]),
-    "lowpass_filter_state": LOWPASS_INIT_STATE, # initialse filter state, # lowpass filter state  
+    "lowpass_filter_state": LOWPASS_INIT_STATE, # initialse filter state, # lowpass filter state
+    "aweight_filter_state": LOWPASS_INIT_STATE, # initialse filter state, # aweight filter state
     "audio_data_pcm_abs": np.array([]),
     "audio_data_mV": np.array([]),
     "audio_data_mV_calib": np.array([]),
@@ -1359,7 +1378,8 @@ if __name__ == "__main__":
         data_dictionary['audio_data']                           = np.array([])
         data_dictionary['a_weighted_signal']                    = np.array([])
         data_dictionary['lowpass_signal']                       = np.array([])
-        data_dictionary['lowpass_filter_state']                 = LOWPASS_INIT_STATE # initialse filter state, # lowpass filter state 
+        data_dictionary['lowpass_filter_state']                 = LOWPASS_INIT_STATE # initialse filter state, # lowpass filter state
+        data_dictionary['aweight_filter_state']                 = AWEIGHT_INIT_STATE # initialse filter state, # lowpass filter state 
         data_dictionary['audio_data_pcm_abs']                   = np.array([])
         data_dictionary['audio_data_mV']                        = np.array([])
         data_dictionary['audio_data_mV_calib']                  = np.array([])
