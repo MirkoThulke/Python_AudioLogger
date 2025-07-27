@@ -245,9 +245,18 @@ pipeline {
 				junit 'report_lowpass.xml'  // publish results
 				junit 'report_aweighted.xml'  // publish results
 				junit 'report_smoke_test.xml'  // publish results
-                echo "Pipeline finished."
+				
+				//  keeps the XML as a downloadable build artifact.
+				archiveArtifacts artifacts: 'report_integration_test_config.xml', fingerprint: true
+				archiveArtifacts artifacts: 'report_integration_test_functional.xml', fingerprint: true
+				archiveArtifacts artifacts: 'report_lowpass.xml', fingerprint: true
+				archiveArtifacts artifacts: 'report_aweighted.xml', fingerprint: true
+				archiveArtifacts artifacts: 'report_smoke_test.xml', fingerprint: true
 				
 				cleanWs() // Deletes workspace after build
+				
+                echo "Pipeline finished."
+				
 				
         }
     
