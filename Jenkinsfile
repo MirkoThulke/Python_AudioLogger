@@ -73,17 +73,17 @@ pipeline {
 
 		stage('Cleanup') {
 			steps {
-					echo "Deleting contents of ${env.OUTPUT_DIR}..."
-					sh """
-                    	# Make sure the directory exists
-                    	mkdir -p ${OUTPUT_DIR}
+				sh '''
+                    echo "Cleaning directory: $OUTPUT_DIR"
 
-                    	# Remove all contents (files + subdirs) safely
-                    	rm -rf ${OUTPUT_DIR:?}/\\*
-						# Optional: confirm it's clean
-						echo "Remaining contents:"
-						ls -la ${OUTPUT_DIR}
-					"""
+                    # Safer: ensure it's not empty
+                    if [ -n "$OUTPUT_DIR" ]; then
+                        rm -rf "$OUTPUT_DIR"/\\*
+					fi
+
+					echo "Remaining contents:"
+					ls -la "$OUTPUT_DIR"
+				'''
 			}
 		}
 
