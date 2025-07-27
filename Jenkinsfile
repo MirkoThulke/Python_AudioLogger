@@ -56,6 +56,10 @@ pipeline {
         REPO = 'MirkoThulke/Python_AudioLogger'
     }
 
+	
+	options {
+		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
+	}
 
     stages {
         // put individual stages here ....
@@ -242,6 +246,9 @@ pipeline {
 				junit 'report_aweighted.xml'  // publish results
 				junit 'report_smoke_test.xml'  // publish results
                 echo "Pipeline finished."
+				
+				cleanWs() // Deletes workspace after build
+				
         }
     
 		
