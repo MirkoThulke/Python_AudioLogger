@@ -89,14 +89,23 @@ pipeline {
                         
  
                         
-                        withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
-                            bat """
-                                curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                                 -H "Accept: application/vnd.github.v3+json" ^
-                                 -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                 -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
-                            """
-                        }
+                            withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
+                                if (isUnix()) {
+                                    sh """
+                                        curl -H "Authorization: token ${GITHUB_TOKEN}" \\
+                                        -H "Accept: application/vnd.github.v3+json" \\
+                                        -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
+                                        -d '{\"state\": \"pending\", \"context\": \"jenkins/build\", \"description\": \"Build started\"}'
+                                        """
+                                } else {
+                                    bat """
+                                        curl -H "Authorization: token %GITHUB_TOKEN%" ^
+                                        -H "Accept: application/vnd.github.v3+json" ^
+                                        -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
+                                        -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
+                                        """
+                                }
+                            }
                     }
             }
         }
