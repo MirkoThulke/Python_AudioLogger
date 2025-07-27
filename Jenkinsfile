@@ -65,7 +65,10 @@ pipeline {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
           
-        
+		script {
+			setGitHubStatus("pending", "Build is running")
+		}
+		
         stage('Checkout') {
             steps {
                     checkout scm
@@ -270,14 +273,14 @@ pipeline {
                          -H "Accept: application/vnd.github.v3+json" \\
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
                          -d '{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}'
-                """
+						"""
 					} else {
 						bat """
                     curl -H "Authorization: token %GITHUB_TOKEN%" ^
                          -H "Accept: application/vnd.github.v3+json" ^
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                          -d "{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}"
-                """
+						"""
 					}
 				}
 			}
@@ -292,14 +295,14 @@ pipeline {
                          -H "Accept: application/vnd.github.v3+json" \\
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
                          -d '{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}'
-                """
+						"""
 					} else {
 						bat """
                     curl -H "Authorization: token %GITHUB_TOKEN%" ^
                          -H "Accept: application/vnd.github.v3+json" ^
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                          -d "{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}"
-                """
+						"""
 					}
 				}
 			}
