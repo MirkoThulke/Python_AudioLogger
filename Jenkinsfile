@@ -87,10 +87,6 @@ pipeline {
 		
         stage('Checkout') {
             steps {
-				
-					script {
-						setGitHubStatus("pending", "Build is running")
-					}
 						
                     checkout scm
             }
