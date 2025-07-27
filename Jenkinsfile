@@ -66,9 +66,6 @@ pipeline {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
         
-		script {
-			setGitHubStatus("pending", "Build is running")
-		}
 
 
 		stage('Cleanup') {
@@ -90,6 +87,11 @@ pipeline {
 		
         stage('Checkout') {
             steps {
+				
+					script {
+						setGitHubStatus("pending", "Build is running")
+					}
+						
                     checkout scm
             }
         }
