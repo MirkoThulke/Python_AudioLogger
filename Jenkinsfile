@@ -55,6 +55,7 @@ pipeline {
     environment {
         REPO = 'MirkoThulke/Python_AudioLogger'
 		OUTPUT_DIR = "${WORKSPACE}"
+		PATH = "$HOME/.local/bin:$PATH"
     }
 
 	
