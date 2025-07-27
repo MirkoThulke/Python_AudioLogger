@@ -212,10 +212,10 @@ pipeline {
             steps {
                 echo "Running smoke tests..."
 				
-				def error_flag = 0
-				
                 script { 
-                    
+					
+					def error_flag = 0
+					
 					if (isUnix()) {
 						error_flag = sh(script: 'pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
 					} else {
