@@ -54,6 +54,7 @@ pipeline {
     
     environment {
         REPO = 'MirkoThulke/Python_AudioLogger'
+		OUTPUT_DIR = "${WORKSPACE}"
     }
 
 	
@@ -64,10 +65,28 @@ pipeline {
     stages {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
-          
+        
 		script {
 			setGitHubStatus("pending", "Build is running")
 		}
+
+
+		stage('Cleanup') {
+			steps {
+					echo "Deleting contents of ${env.OUTPUT_DIR}..."
+					sh """
+                    	# Make sure the directory exists
+                    	mkdir -p ${OUTPUT_DIR}
+
+                    	# Remove all contents (files + subdirs) safely
+                    	rm -rf ${OUTPUT_DIR:?}/\\*
+						# Optional: confirm it's clean
+						echo "Remaining contents:"
+						ls -la ${OUTPUT_DIR}
+					"""
+			}
+		}
+
 		
         stage('Checkout') {
             steps {
