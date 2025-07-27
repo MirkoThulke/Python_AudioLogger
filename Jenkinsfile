@@ -298,17 +298,18 @@ pipeline {
                          -H "Accept: application/vnd.github.v3+json" \\
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
                          -d '{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}'
-                """
+							"""
 					} else {
 						bat """
                     curl -H "Authorization: token %GITHUB_TOKEN%" ^
                          -H "Accept: application/vnd.github.v3+json" ^
                          -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
                          -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}"
-                """
+						"""
 					}
 				}
 			}
 		}
-			
-}
+		
+    } // post			
+} //pipeline
