@@ -70,15 +70,26 @@ pipeline {
         }
 
 
-        stage('Set Commit SHA') {
+        stage('Capture Git Commit SHA') {
             steps {
-                    script {
-                            env.COMMIT_SHA = bat(
-                            script: '@echo off & git rev-parse HEAD',
-                            returnStdout: true
+                script {
+                    try {
+                        if (isUnix()) {
+                            env.COMMIT_SHA = sh(
+                                script: 'git rev-parse HEAD',
+                                returnStdout: true
                             ).trim()
-                            echo "COMMIT_SHA is: ${env.COMMIT_SHA}"
+                        } else {
+                            env.COMMIT_SHA = bat(
+                                script: '@echo off & git rev-parse HEAD',
+                                returnStdout: true
+                            ).trim()
+                        }
+                        echo "COMMIT_SHA is: ${env.COMMIT_SHA}"
+                    } catch (e) {
+                        error "Failed to retrieve Git commit SHA: ${e}"
                     }
+                }
             }
         }
         
@@ -86,8 +97,6 @@ pipeline {
         stage('Notify GitHub - Pending') {
             steps {
                     script {
-                        
- 
                         
                             withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                                 if (isUnix()) {
@@ -114,14 +123,24 @@ pipeline {
         stage('Integration Test - Python Config') {
             steps {
                 echo "Running Python config integration test..."
-
+        
                 script {
-                    
-                    def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py', returnStatus: true)
-
+                    def error_flag
+                    if (isUnix()) {
+                        error_flag = sh(
+                            script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
+                            returnStatus: true
+                        )
+                    } else {
+                        error_flag = bat(
+                            script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
+                            returnStatus: true
+                        )
+                    }
+        
                     if (error_flag != 0) {
                         echo "Integration test failed with code ${error_flag}."
-                        currentBuild.result = 'UNSTABLE'
+                        currentBuild.result = 'UNSTABLE' // Or use 'FAILURE' if stricter
                     } else {
                         echo "Integration test passed. All good."
                     }
@@ -131,18 +150,32 @@ pipeline {
 
 
 
-        stage('Integration Tests - Functional') 
-        {
-            steps
-            {
+        stage('Integration Tests - Functional') {
+            steps {
                 echo "Running functional integration tests..."
-
-                script{
-                    def error_flag = bat(script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py', returnStatus: true)
+        
+                script {
+                    def error_flag
+                    if (isUnix()) {
+                        error_flag = sh(
+                            script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py',
+                            returnStatus: true
+                        )
+                    } else {
+                        error_flag = bat(
+                            script: 'pytest --junitxml=report.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py',
+                            returnStatus: true
+                        )
+                    }
+        
+                    if (error_flag != 0) {
+                        error "Functional integration test failed with exit code ${error_flag}."
+                    } else {
+                        echo "Functional test passed. All good."
+                    }
                 }
             }
         }
-
 
 
         stage('Unit Test') {
