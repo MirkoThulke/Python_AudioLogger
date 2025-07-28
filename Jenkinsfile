@@ -56,6 +56,7 @@ pipeline {
         REPO = 'MirkoThulke/Python_AudioLogger'
 		OUTPUT_DIR = "${WORKSPACE}"
 		PATH = "/usr/local/bin:${env.PATH}"
+		VENV_DIR = "${WORKSPACE}/venv" // virtual environment
     }
 
 	
@@ -85,6 +86,21 @@ pipeline {
 			}
 		}
 
+		
+		stage('Prepare Environment') {
+			steps {
+				sh '''
+                    python3 -m venv $VENV_DIR
+                    source $VENV_DIR/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                '''
+		}
+		// venv : A virtual environment in Python is an isolated workspace that contains its own Python interpreter and libraries — separate from the system-wide Python installation.
+		// With a virtual environment:
+		// ✅ You isolate your project's dependencies
+		// ✅ You avoid interfering with the system Python
+		// ✅ You ensure consistent builds across machines (especially in CI/CD like Jenkins)
 		
         stage('Checkout') {
             steps {
