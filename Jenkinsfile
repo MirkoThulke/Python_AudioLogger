@@ -95,6 +95,7 @@ pipeline {
                     pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
+			}
 		}
 		// venv : A virtual environment in Python is an isolated workspace that contains its own Python interpreter and libraries — separate from the system-wide Python installation.
 		// With a virtual environment:
