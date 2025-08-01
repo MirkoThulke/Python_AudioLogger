@@ -90,17 +90,19 @@ pipeline {
 		// Check resource on Cloud instance
 		stage('Check System Resources') {
 					steps {
+                        script {
 						if (isUnix()) {
-										sh 'free -h'  // RAM 
-										sh 'sudo du -h / | sort -rh | head -n 20'
-										sh 'df -h'	 // Disk space
-										sh 'lsblk'
+					    sh 'free -h'  // RAM 
+						sh 'sudo du -h / | sort -rh | head -n 20'
+                        sh 'df -h'	 // Disk space
+						sh 'lsblk'
 						} else {
-										bat 'free -h'  // RAM
-										bat 'sudo du -h / | sort -rh | head -n 20'
-										bat 'df -h'	 // Disk space
-										bat 'lsblk'
+						bat 'free -h'  // RAM
+						bat 'sudo du -h / | sort -rh | head -n 20'
+						bat 'df -h'	 // Disk space
+						bat 'lsblk'
 						}
+                        }
 					}
 		}
 
