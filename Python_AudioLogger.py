@@ -41,6 +41,7 @@ cmd> python --version
 cmd> python3 --version
 cmd> pip install --upgrade -r requirements.txt
 cmd> pip freeze > requirements.txt
+cmd> PS C:\...\Python_AudioLogger> pipreqs --force // creates a requirements.txt for this project
 cmd> pip list --outdated
 '''
 import wx # click button GUI
