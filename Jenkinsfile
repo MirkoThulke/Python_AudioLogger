@@ -58,7 +58,13 @@ pipeline {
 		PATH = "/usr/local/bin:${env.PATH}"
 		VENV_DIR = "${WORKSPACE}/venv" // virtual environment
     }
-
+	
+	// venv : A virtual environment in Python is an isolated workspace that contains its own Python interpreter and libraries — separate from the system-wide Python installation.
+	// With a virtual environment:
+	// ✅ You isolate your project's dependencies
+	// ✅ You avoid interfering with the system Python
+	// ✅ You ensure consistent builds across machines (especially in CI/CD like Jenkins)
+	
 	
 	options {
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
@@ -69,39 +75,24 @@ pipeline {
         // each stage represents a jenkins pipeline stage
         
 
-
-		stage('Cleanup') {
-			steps {
-				sh '''
-                    echo "Cleaning directory: $OUTPUT_DIR"
-
-                    # Safer: ensure it's not empty
-                    if [ -n "$OUTPUT_DIR" ]; then
-                        rm -rf "$OUTPUT_DIR"/\\*
-					fi
-
-					echo "Remaining contents:"
-					ls -la "$OUTPUT_DIR"
-				'''
-			}
-		}
-
 		
-		stage('Prepare Environment') {
-		    steps {
-		        sh '''
-		            python3 -m venv $VENV_DIR
-		            . $VENV_DIR/bin/activate
-		            pip install --upgrade pip
-		            pip install -r requirements.txt
-		        '''
-		    }
+		// Check resource on Cloud instance
+		stage('Check System Resources') {
+					steps {
+						if (isUnix()) {
+										sh 'free -h'  // RAM 
+										sh 'sudo du -h / | sort -rh | head -n 20'
+										sh 'df -h'	 // Disk space
+										sh 'lsblk'
+						} else {
+										bat 'free -h'  // RAM
+										bat 'sudo du -h / | sort -rh | head -n 20'
+										bat 'df -h'	 // Disk space
+										bat 'lsblk'
+						}
+					}
 		}
-		// venv : A virtual environment in Python is an isolated workspace that contains its own Python interpreter and libraries — separate from the system-wide Python installation.
-		// With a virtual environment:
-		// ✅ You isolate your project's dependencies
-		// ✅ You avoid interfering with the system Python
-		// ✅ You ensure consistent builds across machines (especially in CI/CD like Jenkins)
+
 		
         stage('Checkout') {
             steps {
@@ -160,12 +151,55 @@ pipeline {
             }
         }
 
+		stage('Update Linux') {
+			steps {
+					echo "Checking if Linux packages must be updated ..."
+					script {
+					
+						if (isUnix()) {
+							sh '''
+								sudo apt update
+							'''
+						} 
+		
+					}
+			}
+		}
+		
+		stage('Update Python') {
+			steps {
+					echo "Checking if python packages must be updated ..."
+					script {
+						source "${VENV_DIR}/bin/activate" // open python vitural environment
+					
+						if (isUnix()) {
+							sh '''
+								pip cache purge  // remove of old cache files first
+								pip install --upgrade pip
+								pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								pip cache purge  // remove of old cache files first
+							'''
+
+						} else {
+							bat '''
+								pip cache purge  // remove of old cache files first
+								pip install --upgrade pip
+								pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								pip cache purge  // remove of old cache files first
+							'''
+						}
+        
+					}
+			}
+		}
+		
 
         stage('Integration Test - Python Config') {
             steps {
                 echo "Running Python config integration test..."
         
                 script {
+					source "${VENV_DIR}/bin/activate" // open python vitural environment
                     def error_flag = 0
 					
                     if (isUnix()) {
@@ -183,6 +217,7 @@ pipeline {
                     if (error_flag != 0) {
                         echo "Integration test failed with code ${error_flag}."
                         currentBuild.result = 'UNSTABLE' // Or use 'FAILURE' if stricter
+						
                     } else {
                         echo "Integration test passed. All good."
                     }
@@ -197,6 +232,7 @@ pipeline {
                 echo "Running functional integration tests..."
         
                 script {
+					source "${VENV_DIR}/bin/activate" // open python vitural environment
                     def error_flag = 0
 					
                     if (isUnix()) {
@@ -226,6 +262,7 @@ pipeline {
                 echo "Running unit tests..."
 
                 script {
+					source "${VENV_DIR}/bin/activate" // open python vitural environment
 					def error_flag_lowpass = 0
 					def error_flag_aweighted = 0
 					
@@ -251,7 +288,7 @@ pipeline {
                 echo "Running smoke tests..."
 				
                 script { 
-					
+					source "${VENV_DIR}/bin/activate" // open python vitural environment
 					def error_flag = 0
 					
 					if (isUnix()) {
@@ -293,6 +330,14 @@ pipeline {
 				
 				cleanWs() // Deletes workspace after build
 				
+				// Clean up linux
+				sh 'sudo apt clean'  		// Cleans all cached .deb files
+				sh 'sudo apt autoclean'  	// Removes old .deb files that can’t be downloaded anymore
+				sh 'sudo journalctl --vacuum-time=2d'  	// Removes old .deb files that can’t be downloaded anymore
+				sh 'sudo rm -rf /tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+				sh 'sudo rm -rf /var/tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+
+						
                 echo "Pipeline finished."
 				
 				
