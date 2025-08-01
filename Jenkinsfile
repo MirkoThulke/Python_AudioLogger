@@ -56,15 +56,12 @@ pipeline {
         REPO = 'MirkoThulke/Python_AudioLogger'
 		OUTPUT_DIR = "${WORKSPACE}"
 		PATH = "/usr/local/bin:${env.PATH}"
-		VENV_DIR = "${WORKSPACE}/venv" // virtual environment
+		// Virtual environment
+        CONDA_BASE = "${HOME}/miniconda3"
+        CONDA_ENV = "wxenv"
     }
 	
-	// venv : A virtual environment in Python is an isolated workspace that contains its own Python interpreter and libraries — separate from the system-wide Python installation.
-	// With a virtual environment:
-	// ✅ You isolate your project's dependencies
-	// ✅ You avoid interfering with the system Python
-	// ✅ You ensure consistent builds across machines (especially in CI/CD like Jenkins)
-	
+
 	
 	options {
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
@@ -170,8 +167,11 @@ pipeline {
 			steps {
 					echo "Checking if python packages must be updated ..."
 					script {
-						source "${VENV_DIR}/bin/activate" // open python vitural environment
-					
+                        
+						echo "Activating Conda environment: $CONDA_ENV"
+                        source $CONDA_BASE/etc/profile.d/conda.sh
+                        conda activate $CONDA_ENV
+
 						if (isUnix()) {
 							sh '''
 								pip cache purge  // remove of old cache files first
@@ -199,7 +199,11 @@ pipeline {
                 echo "Running Python config integration test..."
         
                 script {
-					source "${VENV_DIR}/bin/activate" // open python vitural environment
+                    
+                    echo "Activating Conda environment: $CONDA_ENV"
+                    source $CONDA_BASE/etc/profile.d/conda.sh
+                    conda activate $CONDA_ENV
+                        
                     def error_flag = 0
 					
                     if (isUnix()) {
@@ -234,7 +238,11 @@ pipeline {
                 echo "Running functional integration tests..."
         
                 script {
-					source "${VENV_DIR}/bin/activate" // open python vitural environment
+                    
+                    echo "Activating Conda environment: $CONDA_ENV"
+                    source $CONDA_BASE/etc/profile.d/conda.sh
+                    conda activate $CONDA_ENV
+                    
                     def error_flag = 0
 					
                     if (isUnix()) {
@@ -264,7 +272,11 @@ pipeline {
                 echo "Running unit tests..."
 
                 script {
-					source "${VENV_DIR}/bin/activate" // open python vitural environment
+                    
+                    echo "Activating Conda environment: $CONDA_ENV"
+                    source $CONDA_BASE/etc/profile.d/conda.sh
+                    conda activate $CONDA_ENV
+                    
 					def error_flag_lowpass = 0
 					def error_flag_aweighted = 0
 					
@@ -290,7 +302,11 @@ pipeline {
                 echo "Running smoke tests..."
 				
                 script { 
-					source "${VENV_DIR}/bin/activate" // open python vitural environment
+                    
+                    echo "Activating Conda environment: $CONDA_ENV"
+                    source $CONDA_BASE/etc/profile.d/conda.sh
+                    conda activate $CONDA_ENV
+                    
 					def error_flag = 0
 					
 					if (isUnix()) {
