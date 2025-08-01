@@ -222,13 +222,11 @@ pipeline {
 					
                     if (isUnix()) {
                         error_flag = sh(
-							export IS_UNIX=true
                             script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
                             returnStatus: true
                         )
                     } else {
                         error_flag = bat(
-							export IS_UNIX=false
                             script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
                             returnStatus: true
                         )
