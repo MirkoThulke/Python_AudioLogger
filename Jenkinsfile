@@ -176,7 +176,7 @@ pipeline {
 							sh '''
 								pip cache purge  // remove of old cache files first
 								pip install --upgrade pip
-								pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								// pip install --upgrade -r ${WORKSPACE}/requirements.txt
 								pip cache purge  // remove of old cache files first
 							'''
 
@@ -184,7 +184,7 @@ pipeline {
 							bat '''
 								pip cache purge  // remove of old cache files first
 								pip install --upgrade pip
-								pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								// pip install --upgrade -r ${WORKSPACE}/requirements.txt
 								pip cache purge  // remove of old cache files first
 							'''
 						}
