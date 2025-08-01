@@ -76,17 +76,20 @@ pipeline {
         
         stage('Set IS_UNIX variable') {
             steps {
-                script {
-                    if (isUnix()) {
-                        env.IS_UNIX = "true"
-                    } else {
-                        env.IS_UNIX = "false"
+                    script {
+                        if (isUnix()) {
+                            env.IS_UNIX = "true"
+                        } else {
+                            env.IS_UNIX = "false"
+                        }
                     }
+                    
+                    // Use double quotes and Groovy interpolation to pass the env var value into the shell
+                    sh "echo IS_UNIX is ${env.IS_UNIX}"
                 }
-                sh 'echo "IS_UNIX is $IS_UNIX"'
-            }
         }
 		
+        
 		// Check resource on Cloud instance
 		stage('Check System Resources') {
 					steps {
