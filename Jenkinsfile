@@ -61,11 +61,6 @@ pipeline {
         // Virtual environment
         CONDA_BASE = "${HOME}/miniconda3"
         CONDA_ENV = "wxenv"
-        
-        sh '''
-            export IS_UNIX=true
-            echo "IS_UNIX is set to $IS_UNIX"
-        '''
     }
 	
 
@@ -78,7 +73,19 @@ pipeline {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
         
-
+        
+        stage('Set IS_UNIX variable') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        env.IS_UNIX = "true"
+                    } else {
+                        env.IS_UNIX = "false"
+                    }
+                }
+                sh 'echo "IS_UNIX is $IS_UNIX"'
+            }
+        }
 		
 		// Check resource on Cloud instance
 		stage('Check System Resources') {
