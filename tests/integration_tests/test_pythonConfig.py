@@ -1,17 +1,23 @@
 import sys
 import platform
 import subprocess
+import os
 
+
+is_unix = os.getenv('IS_UNIX') == 'true'
 
 # Pytest section ########
 PASSED      = True
 FAILED      = False
 
 # For requirement.txt file check
-file1 = "requirements.txt"
-file2 = "requirements_new.txt"
-
-
+if is_unix :
+    file1 = "requirements_linux.txt"
+    file2 = "requirements_linux_new.txt"
+else :
+    file1 = "requirements_windows.txt"
+    file2 = "requirements_windows_new.txt"
+    
 #########################
 # Pytest calls all functions starting with "test_" automatically
 # hence, functions to be called by pytest MUST start with "test_"

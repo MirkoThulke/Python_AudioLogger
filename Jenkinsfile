@@ -176,7 +176,7 @@ pipeline {
 							sh '''
 								pip cache purge  // remove of old cache files first
 								pip install --upgrade pip
-								// pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								pip install --upgrade -r ${WORKSPACE}/requirements_linux.txt
 								pip cache purge  // remove of old cache files first
 							'''
 
@@ -184,7 +184,7 @@ pipeline {
 							bat '''
 								pip cache purge  // remove of old cache files first
 								pip install --upgrade pip
-								// pip install --upgrade -r ${WORKSPACE}/requirements.txt
+								pip install --upgrade -r ${WORKSPACE}/requirements_windows.txt
 								pip cache purge  // remove of old cache files first
 							'''
 						}
@@ -204,11 +204,13 @@ pipeline {
 					
                     if (isUnix()) {
                         error_flag = sh(
+							export IS_UNIX=true
                             script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
                             returnStatus: true
                         )
                     } else {
                         error_flag = bat(
+							export IS_UNIX=false
                             script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
                             returnStatus: true
                         )
