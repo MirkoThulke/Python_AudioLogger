@@ -53,12 +53,19 @@ pipeline {
     
     
     environment {
+        
         REPO = 'MirkoThulke/Python_AudioLogger'
 		OUTPUT_DIR = "${WORKSPACE}"
 		PATH = "/usr/local/bin:${env.PATH}"
-		// Virtual environment
+		
+        // Virtual environment
         CONDA_BASE = "${HOME}/miniconda3"
         CONDA_ENV = "wxenv"
+        
+        sh '''
+            export IS_UNIX=true
+            echo "IS_UNIX is set to $IS_UNIX"
+        '''
     }
 	
 
