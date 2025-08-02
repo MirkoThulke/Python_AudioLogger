@@ -100,13 +100,14 @@ pipeline {
                                     sh 'sudo du -h / | sort -rh | head -n 20'
                                     sh 'df -h'     // Disk space
                                     sh 'lsblk'
+                            }
                         } 
         
                     }
         }                
                         
 		
-        stage('Checkout') {
+        stage('Checkout Github') {
             steps {
 						
                     checkout scm
