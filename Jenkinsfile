@@ -191,18 +191,18 @@ pipeline {
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
 							
-								pip cache purge  // remove of old cache files first
+								pip cache purge  # remove of old cache files first
 								pip install --upgrade pip
 								pip install --upgrade -r ${WORKSPACE}/requirements_linux.txt
-								pip cache purge  // remove of old cache files first
+								pip cache purge  # remove of old cache files first
 							'''
 
 						} else {
 							bat '''
-								pip cache purge  // remove of old cache files first
+								pip cache purge  :: remove of old cache files first
 								pip install --upgrade pip
 								pip install --upgrade -r ${WORKSPACE}/requirements_windows.txt
-								pip cache purge  // remove of old cache files first
+								pip cache purge  :: remove of old cache files first
 							'''
 						}
         
