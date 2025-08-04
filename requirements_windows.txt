@@ -9,3 +9,4 @@ scipy==1.16.0
 sympy==1.14.0
 viztracer==1.0.4
 wxpython==4.2.3
+audioop-lts==0.2.1
