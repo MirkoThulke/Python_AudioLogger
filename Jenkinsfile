@@ -253,16 +253,16 @@ pipeline {
                     def error_flag = 0
 					
                     if (isUnix()) {
-                        error_flag = sh(
+						error_flag = sh(
 							script: """
-								echo "Activating Conda environment: \$CONDA_ENV"
-								source \$CONDA_BASE/etc/profile.d/conda.sh
-								conda activate \$CONDA_ENV
-							
-                            script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py'
+							set -e
+							echo "Activating Conda environment: \$CONDA_ENV"
+							source \$CONDA_BASE/etc/profile.d/conda.sh
+							conda activate \$CONDA_ENV
+							pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
 							""",
-                            returnStatus: true
-                        )
+							returnStatus: true
+						)
                     } else {
                         error_flag = bat(
                             script: 'pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py',
