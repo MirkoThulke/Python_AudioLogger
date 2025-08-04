@@ -2,7 +2,7 @@ import sys
 import platform
 import subprocess
 import os
-
+import pipreqs
 
 is_unix = os.getenv('IS_UNIX') == 'true'
 
@@ -146,12 +146,11 @@ def test_check_outdated():
         assert False, f"Error during pip list: {e}"
 
 
-
+# Export only those packages that are relevant for this application
 def test_export_installed_packages():
     try:
         with open(file2, 'w') as f:
             subprocess.run(['pip', 'freeze'], stdout=f)
-               
     except Exception as e:
         assert False, f"Error during pip freeze: {e}"
 
