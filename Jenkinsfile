@@ -347,9 +347,6 @@ pipeline {
 				
                 script { 
                     
-                    echo "Activating Conda environment: $CONDA_ENV"
-                    source $CONDA_BASE/etc/profile.d/conda.sh
-                    conda activate $CONDA_ENV
                     
 					def error_flag = 0
 					
