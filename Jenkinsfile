@@ -167,19 +167,19 @@ pipeline {
                         
                             withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                                 if (isUnix()) {
-                                    sh """
-                                        curl -H "Authorization: token ${GITHUB_TOKEN}" \\
-                                        -H "Accept: application/vnd.github.v3+json" \\
-                                        -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
-                                        -d '{\"state\": \"pending\", \"context\": \"jenkins/build\", \"description\": \"Build started\"}'
-                                        """
+									sh script: '''
+										curl -H "Authorization: token $GITHUB_TOKEN" \
+										-H "Accept: application/vnd.github.v3+json" \
+										-X POST https://api.github.com/repos/${REPO}/statuses/${COMMIT_SHA} \
+										-d '{"state": "pending", "context": "jenkins/build", "description": "Build started"}'
+										''', env: [REPO: env.REPO, COMMIT_SHA: env.COMMIT_SHA]
                                 } else {
-                                    bat """
-                                        curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                                        -H "Accept: application/vnd.github.v3+json" ^
-                                        -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                                        -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
-                                        """
+									bat script: """
+										curl -H "Authorization: token %GITHUB_TOKEN%" ^
+										-H "Accept: application/vnd.github.v3+json" ^
+										-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
+										-d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
+										"""
                                 }
                             }
                     }
@@ -193,7 +193,7 @@ pipeline {
 					
 						if (isUnix()) {
 							sh '''
-								sudo apt update
+								sudo apt-get update
 							'''
 						} 
 		
@@ -208,7 +208,7 @@ pipeline {
                         
 
 						if (isUnix()) {
-							sh '''
+							sh(script: '''
 								echo "Activating Conda environment: $CONDA_ENV"
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
@@ -222,7 +222,7 @@ pipeline {
 							
 								# remove of old cache files first
 								pip cache purge
-							'''
+							 ''', shell: '/bin/bash')
 
 						} else {
 							bat '''
