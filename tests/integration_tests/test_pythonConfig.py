@@ -147,12 +147,24 @@ def test_check_outdated():
 
 
 # Export only those packages that are relevant for this application
-def test_export_installed_packages():
+def test_generate_requirements_with_pipreqs():
     try:
-        with open(file2, 'w') as f:
-            subprocess.run(['pip', 'freeze'], stdout=f)
+        result = subprocess.run(
+            ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        print(result.stdout)
+        if result.returncode != 0:
+            print(result.stderr)
+            assert False, f"pipreqs failed with error: {result.stderr}"
+
+        assert os.path.exists(file2), f"Requirements file not created: {file2}"
+
     except Exception as e:
-        assert False, f"Error during pip freeze: {e}"
+        assert False, f"Error during pipreqs: {e}"
 
 
 def load_requirementsFiles(file_path):
