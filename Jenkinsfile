@@ -305,16 +305,28 @@ pipeline {
 
                 script {
                     
-                    echo "Activating Conda environment: $CONDA_ENV"
-                    source $CONDA_BASE/etc/profile.d/conda.sh
-                    conda activate $CONDA_ENV
-                    
 					def error_flag_lowpass = 0
 					def error_flag_aweighted = 0
 					
 					if (isUnix()) {
-						error_flag_lowpass = sh(script: 'pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
-						error_flag_aweighted = sh(script: 'pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py', returnStatus: true)
+						
+							error_flag_lowpass = sh(
+								script: '''
+									source $CONDA_BASE/etc/profile.d/conda.sh
+									conda activate $CONDA_ENV
+									pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py
+									''',
+									returnStatus: true 
+							)
+							error_flag_aweighted = sh(
+								script: '''
+									source $CONDA_BASE/etc/profile.d/conda.sh
+									conda activate $CONDA_ENV
+									pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
+									''',
+									returnStatus: true
+							)
+							
 					} else {
 						error_flag_lowpass = bat(script: 'pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py', returnStatus: true)
 						error_flag_aweighted = bat(script: 'pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py', returnStatus: true)
@@ -342,7 +354,15 @@ pipeline {
 					def error_flag = 0
 					
 					if (isUnix()) {
-						error_flag = sh(script: 'pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
+						error_flag = sh(
+								script: '''
+									source $CONDA_BASE/etc/profile.d/conda.sh
+									conda activate $CONDA_ENV
+									pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
+									''',
+								returnStatus: true 
+						)
+
 					} else {
 						error_flag = bat(script: 'pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py', returnStatus: true)
 					}
