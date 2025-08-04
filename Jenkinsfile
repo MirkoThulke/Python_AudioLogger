@@ -218,6 +218,7 @@ pipeline {
 								echo 'Installing packages...'
 								pip install --upgrade pip
 								pip install --upgrade -r $WORKSPACE/requirements_linux.txt
+								"
 							'''
 						} else {
 							bat '''
