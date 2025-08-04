@@ -382,35 +382,41 @@ pipeline {
     post {
 
         always {
-                junit 'report_integration_test_config.xml'  // publish results
-				junit 'report_integration_test_functional.xml'  // publish results
-				junit 'report_lowpass.xml'  // publish results
-				junit 'report_aweighted.xml'  // publish results
-				junit 'report_smoke_test.xml'  // publish results
+			script {
 				
-				//  keeps the XML as a downloadable build artifact.
-				archiveArtifacts artifacts: 'report_integration_test_config.xml', fingerprint: true
-				archiveArtifacts artifacts: 'report_integration_test_functional.xml', fingerprint: true
-				archiveArtifacts artifacts: 'report_lowpass.xml', fingerprint: true
-				archiveArtifacts artifacts: 'report_aweighted.xml', fingerprint: true
-				archiveArtifacts artifacts: 'report_smoke_test.xml', fingerprint: true
+					def reports = [
+						'report_integration_test_config.xml',
+						'report_integration_test_functional.xml',
+						'report_lowpass.xml',
+						'report_aweighted.xml',
+						'report_smoke_test.xml'
+					]
 				
+					// keeps the XML as a downloadable build artifact.
+					// Publish JUnit test results
+					reports.each { report ->
+							junit testResults: report, allowEmptyResults: true
+							archiveArtifacts artifacts: report, fingerprint: true
+					}
+				
+					
 				cleanWs() // Deletes workspace after build
 				
-				
+
 				if (isUnix()) {
-					// Clean up linux
-					sh 'sudo apt clean'  		// Cleans all cached .deb files
-					sh 'sudo apt autoclean'  	// Removes old .deb files that can’t be downloaded anymore
-					sh 'sudo journalctl --vacuum-time=2d'  	// Removes old .deb files that can’t be downloaded anymore
-					sh 'sudo rm -rf /tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
-					sh 'sudo rm -rf /var/tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+					sh '''
+                    	sudo apt clean
+                    	sudo apt autoclean
+                    	sudo journalctl --vacuum-time=2d
+                    	sudo find /tmp -mindepth 1 -delete
+                    	sudo find /var/tmp -mindepth 1 -delete
+					'''
 				}
 
 				
                 echo "Pipeline finished."
 				
-				
+			}
         }
     
 		
