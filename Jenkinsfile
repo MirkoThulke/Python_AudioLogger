@@ -208,16 +208,16 @@ pipeline {
                         
 
 						if (isUnix()) {
-								sh(script: '''
-									echo "Activating Conda environment: $CONDA_ENV"
-									source $CONDA_BASE/etc/profile.d/conda.sh
-									conda activate $CONDA_ENV
-									
-									echo "Updating Python packages"
-									pip install --upgrade pip
-									pip install --upgrade -r requirements_linux.txt
-									
-									''', shell: '/bin/bash')
+							sh '''
+								echo "Activating Conda environment: $CONDA_ENV"
+								bash -c "
+								source $CONDA_BASE/etc/profile.d/conda.sh
+								conda activate $CONDA_ENV
+								echo 'Installing packages...'
+								pip install --upgrade pip
+								pip install --upgrade -r $WORKSPACE/requirements_linux.txt
+								"
+							'''
 						} else {
 							bat '''
 								REM remove of old cache files first
@@ -249,13 +249,14 @@ pipeline {
                     if (isUnix()) {
 						error_flag = sh(
 							script: """
-							set -e
-							echo "Activating Conda environment: \$CONDA_ENV"
-							source \$CONDA_BASE/etc/profile.d/conda.sh
-							conda activate \$CONDA_ENV
-							pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
-							""",
-							returnStatus: true
+								#!/bin/bash
+								set -e
+								echo "Activating Conda environment: \$CONDA_ENV"
+								source \$CONDA_BASE/etc/profile.d/conda.sh
+								conda activate \$CONDA_ENV
+								pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
+								""",
+								returnStatus: true
 						)
                     } else {
                         error_flag = bat(
@@ -289,6 +290,7 @@ pipeline {
                     if (isUnix()) {
 						error_flag = sh(
 							script: """
+								#!/bin/bash
 								echo "Activating Conda environment: \$CONDA_ENV"
 								source \$CONDA_BASE/etc/profile.d/conda.sh
 								conda activate \$CONDA_ENV
@@ -296,7 +298,7 @@ pipeline {
 								echo "Running pytest integration tests..."
 								pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
 								""",
-						returnStatus: true
+								returnStatus: true
 						)
                     } else {
                         error_flag = bat(
@@ -328,14 +330,16 @@ pipeline {
 						
 							error_flag_lowpass = sh(
 								script: '''
+									#!/bin/bash
 									source $CONDA_BASE/etc/profile.d/conda.sh
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py
 									''',
-									returnStatus: true 
+									returnStatus: true
 							)
 							error_flag_aweighted = sh(
 								script: '''
+									#!/bin/bash
 									source $CONDA_BASE/etc/profile.d/conda.sh
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
@@ -368,12 +372,13 @@ pipeline {
 					
 					if (isUnix()) {
 						error_flag = sh(
-								script: '''
-									source $CONDA_BASE/etc/profile.d/conda.sh
-									conda activate $CONDA_ENV
-									pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
-									''',
-								returnStatus: true 
+							script: '''
+							#!/bin/bash
+							source $CONDA_BASE/etc/profile.d/conda.sh
+							conda activate $CONDA_ENV
+							pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
+							''',
+							returnStatus: true 
 						)
 
 					} else {
