@@ -61,21 +61,16 @@ pipeline {
         // Virtual environment
         CONDA_BASE = "${HOME}/miniconda3"
         CONDA_ENV = "wxenv"
+		SHELL = '/bin/bash'
     }
 	
 
 	
 	options {
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
-		
-		script {
-			if (isUnix()) {
-				shell('/bin/bash')  // Use bash shell for sh steps globally
-			}
-		}
-		
 	}
 
+	
     stages {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
