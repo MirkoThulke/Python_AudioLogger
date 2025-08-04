@@ -211,6 +211,7 @@ pipeline {
 
 						if (isUnix()) {
 							sh '''
+								bash -c "
 								echo "Activating Conda environment: $CONDA_ENV"
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
@@ -245,14 +246,14 @@ pipeline {
 					
                     if (isUnix()) {
 						error_flag = sh(
-							script: """
+							script: '''
 								#!/bin/bash
 								set -e
 								echo "Activating Conda environment: \$CONDA_ENV"
 								source \$CONDA_BASE/etc/profile.d/conda.sh
 								conda activate \$CONDA_ENV
 								pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
-								""",
+								''',
 								returnStatus: true
 						)
                     } else {
@@ -286,7 +287,7 @@ pipeline {
 					
                     if (isUnix()) {
 						error_flag = sh(
-							script: """
+							script: '''
 								#!/bin/bash
 								echo "Activating Conda environment: \$CONDA_ENV"
 								source \$CONDA_BASE/etc/profile.d/conda.sh
@@ -294,7 +295,7 @@ pipeline {
 
 								echo "Running pytest integration tests..."
 								pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
-								""",
+								''',
 								returnStatus: true
 						)
                     } else {
