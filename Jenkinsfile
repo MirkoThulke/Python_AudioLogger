@@ -397,14 +397,17 @@ pipeline {
 				
 				cleanWs() // Deletes workspace after build
 				
-				// Clean up linux
-				sh 'sudo apt clean'  		// Cleans all cached .deb files
-				sh 'sudo apt autoclean'  	// Removes old .deb files that can’t be downloaded anymore
-				sh 'sudo journalctl --vacuum-time=2d'  	// Removes old .deb files that can’t be downloaded anymore
-				sh 'sudo rm -rf /tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
-				sh 'sudo rm -rf /var/tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+				
+				if (isUnix()) {
+					// Clean up linux
+					sh 'sudo apt clean'  		// Cleans all cached .deb files
+					sh 'sudo apt autoclean'  	// Removes old .deb files that can’t be downloaded anymore
+					sh 'sudo journalctl --vacuum-time=2d'  	// Removes old .deb files that can’t be downloaded anymore
+					sh 'sudo rm -rf /tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+					sh 'sudo rm -rf /var/tmp/*'  	// Removes old .deb files that can’t be downloaded anymore
+				}
 
-						
+				
                 echo "Pipeline finished."
 				
 				
