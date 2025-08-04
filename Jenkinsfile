@@ -104,7 +104,29 @@ pipeline {
                         } 
         
                     }
-        }                
+        }           
+		
+		
+		// Clean workingspace and temporary variables
+		stage('Clean System') {
+					steps {
+						script {
+							
+								cleanWs() // Deletes workspace after build
+
+								if (isUnix()) {
+									sh '''
+										sudo apt clean
+										sudo apt autoclean
+										sudo journalctl --vacuum-time=2d
+										sudo find /tmp -mindepth 1 -delete
+										sudo find /var/tmp -mindepth 1 -delete
+									'''
+								}
+						}
+		
+					}
+		}
                         
 		
         stage('Checkout Github') {
@@ -400,18 +422,7 @@ pipeline {
 					}
 				
 					
-				cleanWs() // Deletes workspace after build
-				
 
-				if (isUnix()) {
-					sh '''
-                    	sudo apt clean
-                    	sudo apt autoclean
-                    	sudo journalctl --vacuum-time=2d
-                    	sudo find /tmp -mindepth 1 -delete
-                    	sudo find /var/tmp -mindepth 1 -delete
-					'''
-				}
 
 				
                 echo "Pipeline finished."

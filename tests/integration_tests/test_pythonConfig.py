@@ -147,7 +147,7 @@ def test_check_outdated():
 
 
 # Export only those packages that are relevant for this application
-def test_generate_requirements_with_pipreqs():
+def test_export_installed_packages():
     try:
         result = subprocess.run(
             ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8'],
