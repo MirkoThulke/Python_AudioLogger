@@ -209,7 +209,7 @@ pipeline {
 							
 								pip install --upgrade pip
 							
-								pip install --upgrade -r ${WORKSPACE}/requirements_windows.txt
+								pip install --upgrade -r %WORKSPACE%\\requirements_windows.txt
 							
 								REM remove of old cache files first
 								pip cache purge
