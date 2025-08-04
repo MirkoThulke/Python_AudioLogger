@@ -208,7 +208,8 @@ pipeline {
                         
 
 						if (isUnix()) {
-							sh(script: '''
+							sh(script: """
+								#!/bin/bash
 								echo "Activating Conda environment: $CONDA_ENV"
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
@@ -222,7 +223,7 @@ pipeline {
 							
 								# remove of old cache files first
 								pip cache purge
-							 ''', shell: '/bin/bash')
+							 """, shell: '/bin/bash')
 
 						} else {
 							bat '''
