@@ -67,6 +67,13 @@ pipeline {
 	
 	options {
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
+		
+		script {
+			if (isUnix()) {
+				shell('/bin/bash')  // Use bash shell for sh steps globally
+			}
+		}
+		
 	}
 
     stages {
@@ -210,23 +217,18 @@ pipeline {
 						if (isUnix()) {
 							sh '''
 								echo "Activating Conda environment: $CONDA_ENV"
-								bash -c "
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
 								echo 'Installing packages...'
 								pip install --upgrade pip
 								pip install --upgrade -r $WORKSPACE/requirements_linux.txt
-								"
 							'''
 						} else {
 							bat '''
 								REM remove of old cache files first
 								pip cache purge
-							
 								pip install --upgrade pip
-							
 								pip install --upgrade -r %WORKSPACE%\\requirements_windows.txt
-							
 								REM remove of old cache files first
 								pip cache purge
 							'''
