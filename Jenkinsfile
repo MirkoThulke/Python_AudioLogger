@@ -210,16 +210,14 @@ pipeline {
                         
 
 						if (isUnix()) {
-							sh '''
-								bash -c "
-								echo "Activating Conda environment: $CONDA_ENV"
-								source $CONDA_BASE/etc/profile.d/conda.sh
-								conda activate $CONDA_ENV
-								echo 'Installing packages...'
-								pip install --upgrade pip
-								pip install --upgrade -r $WORKSPACE/requirements_linux.txt
-								"
-							'''
+							sh """
+								echo "Activating Conda environment: \$CONDA_ENV" && \
+								source \$CONDA_BASE/etc/profile.d/conda.sh && \
+								conda activate \$CONDA_ENV && \
+								echo 'Installing packages...' && \
+								pip install --upgrade pip && \
+								pip install --upgrade -r \$WORKSPACE/requirements_linux.txt
+								"""
 						} else {
 							bat '''
 								REM remove of old cache files first
