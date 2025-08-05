@@ -272,15 +272,23 @@ pipeline {
 								"""
 									bash -c '
 										set -e
+										set -ex
 										source ${env.CONDA_BASE}/etc/profile.d/conda.sh
 										conda activate ${env.CONDA_ENV}
 										pip install --upgrade pip
-										pip install --upgrade -r ${env.WORKSPACE}/requirements_linux.txt
+										pip install --upgrade --requirement <(grep -v wxpython ${env.WORKSPACE}/requirements_linux.txt)
+										conda install -y -c conda-forge wxpython==4.2.1
+										python -c "import wx; print(wx.VERSION)"
 										which python
 										which pip
 										python --version
 									'
 								"""
+							/* exclude wxpython from ip update. It can only be installed manaully, 
+							 * because no pre-build wheel exists for Python 3.12
+							 * set -e : stops at error
+							 * set -x : logs output into jenkins console output
+							 */
 							)
 								// only 'bash' supports 'source'. Force bash mode ! 
 						} else {
