@@ -267,16 +267,16 @@ pipeline {
                         
 
 						if (isUnix()) {
-							echo "Activating Conda environment: ${env.CONDA_ENV}"
 							sh(script: 
 								"""
-								#!/bin/bash
-								set -e
-								source ${env.CONDA_BASE}/etc/profile.d/conda.sh
-								conda activate ${env.CONDA_ENV}
-								echo 'Installing packages...'
-								pip install --upgrade pip
-								pip install --upgrade -r ${env.WORKSPACE}/requirements_linux.txt
+									#!/bin/bash
+									set -e
+									echo "Activating Conda environment: ${env.CONDA_ENV}"
+									source ${env.CONDA_BASE}/etc/profile.d/conda.sh
+									conda activate ${env.CONDA_ENV}
+									echo 'Installing packages...'
+									pip install --upgrade pip
+									pip install --upgrade -r ${env.WORKSPACE}/requirements_linux.txt
 								"""
 							 	, shell: "/bin/bash")
 								// only 'bash' supports 'source'. Force bash mode ! 
