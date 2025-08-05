@@ -28,7 +28,6 @@
 // -----------------------------------------------------------------------------
 
 
-
 // pytest options :
 // pytest --junitxml=report.xml  : creates a report, which includes error messages
 // pytest--capture=tee-sys : also adds print statements to the report
@@ -42,8 +41,57 @@
 // Unit test howto :
 // https://youtu.be/6tNS--WetLI?feature=shared
 
+// #########################
+// Command lines prompt :
 
+// Windows 	: bat
+// Runs commands in cmd.exe
 
+// Unix 	: sh or bash (which is an enhanced version of 'sh')
+// Shell [sh]
+// Default shell is /bin/sh
+//
+// Bash shell [bash]
+// sh with #!/bin/bash or bash -c	For bash-specific syntax
+//
+// Quotes ...
+// 🔸 When to use single quotes '...' in sh
+// Use it when:
+// You're running simple one-liner commands.
+// You don't need to inject any Groovy/Environment variables.
+// You want to avoid issues with unintended variable expansion.
+// 
+// 💡 Best Practice
+// Use sh """ ... """ when injecting Jenkins/Groovy variables. This resolved $ variables !
+// Use sh ''' ... ''' when using only shell-side variables and to avoid escaping $.
+// 
+// | Syntax           | Interpolation | Multiline | Use Case                          |
+// | ---------------- | ------------- | --------- | --------------------------------- |
+// | `sh 'cmd'`       | ❌ No          | ❌ No      | Simple one-liner, no variables    |
+// | `sh "cmd $VAR"`  | ✅ Yes         | ❌ No      | One-liner with variable expansion |
+// | `sh ''' cmd '''` | ❌ No          | ✅ Yes     | Multiline, shell expands vars     |
+// | `sh """ cmd """` | ✅ Yes         | ✅ Yes     | Multiline, Groovy expands vars    |
+//
+// | Syntax                                  | Description                                      |
+// | --------------------------------------- | ------------------------------------------------ |
+// | `sh 'command'`                          | Simple one-liner                                 |
+// | `sh '''...'''`                          | Multiline, positional                            |
+// | `sh script: '...'`                      | Explicit, flexible (used when combining options) |
+// | `sh(script: '...', returnStatus: true)` | Best when handling exit codes manually           |
+//
+// | Context               | Where output appears                           |
+// | --------------------- | ---------------------------------------------- |
+// | `echo "..."` (Groovy) | Jenkins pipeline log, as `[Pipeline] echo ...` |
+// | `echo "..."` in `sh`  | Shell step output in Jenkins console           |
+//
+// | Scenario                            | Use `&&`? | Notes                            |
+// | ----------------------------------- | --------- | -------------------------------- |
+// | Run next only if previous succeeded | Yes       | Ensures stop-on-failure behavior |
+// | Run all commands regardless         | No        | All commands run, even if errors |
+// | Using `set -e` in script            | Optional  | `set -e` stops on failure anyway |
+//
+// source : ChatGPT
+// #########################
 
 pipeline {
     
@@ -61,12 +109,15 @@ pipeline {
         // Virtual environment
         CONDA_BASE = "${HOME}/miniconda3"
         CONDA_ENV = "wxenv"
+		
+		// use bash by default. This line is not reliable.
 		SHELL = '/bin/bash'
     }
 	
 
 	
 	options {
+		// Define how many builds shall be kept in the history
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
 	}
 
@@ -74,8 +125,7 @@ pipeline {
     stages {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
-        
-        
+         
         stage('Set IS_UNIX variable') {
             steps {
                     script {
@@ -87,7 +137,7 @@ pipeline {
                     }
                     
                     // Use double quotes and Groovy interpolation to pass the env var value into the shell
-                    sh "echo IS_UNIX is ${env.IS_UNIX}"
+                    echo "IS_UNIX is ${env.IS_UNIX}"
                 }
         }
 
@@ -98,10 +148,12 @@ pipeline {
                     steps {
                         script {
                             if (isUnix()) {
-                                    sh 'free -h'  // RAM 
-                                    sh 'sudo du -h / | sort -rh | head -n 20'
-                                    sh 'df -h'     // Disk space
-                                    sh 'lsblk'
+							    sh '''
+							        free -h
+							        sudo du -h / | sort -rh | head -n 20
+							        df -h
+							        lsblk
+							    '''
                             }
                         } 
         
@@ -154,6 +206,9 @@ pipeline {
                                 returnStdout: true
                             ).trim()
                         }
+					/* .trim() is used here to remove any leading and trailing whitespace, 
+					 * including newline characters, from the output of the sh command.*/
+						
                         echo "COMMIT_SHA is: ${env.COMMIT_SHA}"
                     } catch (e) {
                         error "Failed to retrieve Git commit SHA: ${e}"
@@ -170,7 +225,7 @@ pipeline {
                             withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
                                 if (isUnix()) {
 									sh script: '''
-										curl -H "Authorization: token $GITHUB_TOKEN" \
+										curl --fail -H "Authorization: token $GITHUB_TOKEN" \
 										-H "Accept: application/vnd.github.v3+json" \
 										-X POST https://api.github.com/repos/${REPO}/statuses/${COMMIT_SHA} \
 										-d '{"state": "pending", "context": "jenkins/build", "description": "Build started"}'
@@ -183,6 +238,8 @@ pipeline {
 										-d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build started\\"}"
 										"""
                                 }
+								/* ${REPO} and ${COMMIT_SHA} are shell variables, not Groovy variables.
+								* The shell itself interprets those variables during execution. */
                             }
                     }
             }
@@ -210,14 +267,18 @@ pipeline {
                         
 
 						if (isUnix()) {
-							sh """
-								echo "Activating Conda environment: \$CONDA_ENV" && \
-								source \$CONDA_BASE/etc/profile.d/conda.sh && \
-								conda activate \$CONDA_ENV && \
-								echo 'Installing packages...' && \
-								pip install --upgrade pip && \
+							echo "Activating Conda environment: \$CONDA_ENV"
+							sh(script: 
+								"""
+								set -e
+								source \$CONDA_BASE/etc/profile.d/conda.sh
+								conda activate \$CONDA_ENV
+								echo 'Installing packages...'
+								pip install --upgrade pip
 								pip install --upgrade -r \$WORKSPACE/requirements_linux.txt
 								"""
+							 	, shell: "/bin/bash")
+								// only 'bash' supports 'source'. Force bash mode ! 
 						} else {
 							bat '''
 								REM remove of old cache files first
@@ -244,17 +305,16 @@ pipeline {
                     def error_flag = 0
 					
                     if (isUnix()) {
+						echo "Activating Conda environment: \$CONDA_ENV"
 						error_flag = sh(
 							script: '''
-								bash -c "
 								set -e
-								echo "Activating Conda environment: \$CONDA_ENV"
-								source \$CONDA_BASE/etc/profile.d/conda.sh
-								conda activate \$CONDA_ENV
+								source $CONDA_BASE/etc/profile.d/conda.sh
+								conda activate $CONDA_ENV
 								pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
-								"
-								''',
-								returnStatus: true
+							''',
+							shell: '/bin/bash',
+							returnStatus: true
 						)
                     } else {
                         error_flag = bat(
@@ -281,21 +341,20 @@ pipeline {
                 echo "Running functional integration tests..."
         
                 script {
-                    
-                    
+                                
                     def error_flag = 0
 					
                     if (isUnix()) {
+						echo "Activating Conda environment: \$CONDA_ENV"
 						error_flag = sh(
-						    script: """
-						        bash <<'EOF'
-						        source \$CONDA_BASE/etc/profile.d/conda.sh
-						        conda activate \$CONDA_ENV
-						        echo "Running integration tests..."
+							script: '''
+								set -e
+						        source $CONDA_BASE/etc/profile.d/conda.sh
+						        conda activate $CONDA_ENV
 						        pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
-						        EOF
-						    """,
-						    returnStatus: true
+							''',
+							shell: '/bin/bash',
+							returnStatus: true
 						)
                     } else {
                         error_flag = bat(
@@ -324,26 +383,26 @@ pipeline {
 					def error_flag_aweighted = 0
 					
 					if (isUnix()) {
-						
-							error_flag_lowpass = sh(
-								script: '''
-									bash -c "
+						echo "Activating Conda environment: \$CONDA_ENV"
+						error_flag_lowpass = sh(
+							script: '''
+								set -e
 									source $CONDA_BASE/etc/profile.d/conda.sh
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py
-									"
-									''',
-									returnStatus: true
-							)
-							error_flag_aweighted = sh(
-								script: '''
-									bash -c "
-									source $CONDA_BASE/etc/profile.d/conda.sh
-									conda activate $CONDA_ENV
-									pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
-									"
-									''',
-									returnStatus: true
+							''',
+							shell: '/bin/bash',
+							returnStatus: true
+						)
+						error_flag_aweighted = sh(
+							script: '''
+								set -e
+								source $CONDA_BASE/etc/profile.d/conda.sh
+								conda activate $CONDA_ENV
+								pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
+							''',
+							shell: '/bin/bash',
+							returnStatus: true
 							)
 							
 					} else {
@@ -371,14 +430,14 @@ pipeline {
 					
 					if (isUnix()) {
 						error_flag = sh(
+							echo "Activating Conda environment: \$CONDA_ENV"
 							script: '''
-							bash -c "
-							source $CONDA_BASE/etc/profile.d/conda.sh
-							conda activate $CONDA_ENV
-							pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
-							"
+								source $CONDA_BASE/etc/profile.d/conda.sh
+								conda activate $CONDA_ENV
+								pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
 							''',
-							returnStatus: true 
+							shell: '/bin/bash',
+							returnStatus: true
 						)
 
 					} else {
@@ -421,8 +480,6 @@ pipeline {
 					}
 				
 					
-
-
 				
                 echo "Pipeline finished."
 				
@@ -435,17 +492,17 @@ pipeline {
 				withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
 					if (isUnix()) {
 						sh """
-                    curl -H "Authorization: token \$GITHUB_TOKEN" \\
-                         -H "Accept: application/vnd.github.v3+json" \\
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
-                         -d '{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}'
+							curl -H "Authorization: token \$GITHUB_TOKEN" \\
+							-H "Accept: application/vnd.github.v3+json" \\
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
+							-d '{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}'
 						"""
 					} else {
 						bat """
-                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                         -H "Accept: application/vnd.github.v3+json" ^
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                         -d "{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}"
+							curl -H "Authorization: token %GITHUB_TOKEN%" ^
+							-H "Accept: application/vnd.github.v3+json" ^
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
+                         	-d "{\\"state\\": \\"success\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build succeeded\\"}"
 						"""
 					}
 				}
@@ -457,17 +514,17 @@ pipeline {
 				withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
 					if (isUnix()) {
 						sh """
-                    curl -H "Authorization: token \$GITHUB_TOKEN" \\
-                         -H "Accept: application/vnd.github.v3+json" \\
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
-                         -d '{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}'
+							curl -H "Authorization: token \$GITHUB_TOKEN" \\
+							-H "Accept: application/vnd.github.v3+json" \\
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
+                         	-d '{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}'
 						"""
 					} else {
 						bat """
-                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                         -H "Accept: application/vnd.github.v3+json" ^
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                         -d "{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}"
+							curl -H "Authorization: token %GITHUB_TOKEN%" ^
+							-H "Accept: application/vnd.github.v3+json" ^
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
+                         	-d "{\\"state\\": \\"failure\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build failed\\"}"
 						"""
 					}
 				}
@@ -479,17 +536,17 @@ pipeline {
 				withCredentials([string(credentialsId: 'mirko-github-api-token', variable: 'GITHUB_TOKEN')]) {
 					if (isUnix()) {
 						sh """
-                    curl -H "Authorization: token \$GITHUB_TOKEN" \\
-                         -H "Accept: application/vnd.github.v3+json" \\
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
-                         -d '{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}'
-							"""
+							curl -H "Authorization: token \$GITHUB_TOKEN" \\
+							-H "Accept: application/vnd.github.v3+json" \\
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} \\
+                         	-d '{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}'
+						"""
 					} else {
 						bat """
-                    curl -H "Authorization: token %GITHUB_TOKEN%" ^
-                         -H "Accept: application/vnd.github.v3+json" ^
-                         -X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
-                         -d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}"
+							curl -H "Authorization: token %GITHUB_TOKEN%" ^
+							-H "Accept: application/vnd.github.v3+json" ^
+							-X POST https://api.github.com/repos/${env.REPO}/statuses/${env.COMMIT_SHA} ^
+                         	-d "{\\"state\\": \\"pending\\", \\"context\\": \\"jenkins/build\\", \\"description\\": \\"Build unstable\\"}"
 						"""
 					}
 				}
