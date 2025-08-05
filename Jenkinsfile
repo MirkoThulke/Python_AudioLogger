@@ -267,15 +267,15 @@ pipeline {
                         
 
 						if (isUnix()) {
-							echo "Activating Conda environment: \$CONDA_ENV"
+							echo "Activating Conda environment: ${env.CONDA_ENV}"
 							sh(script: 
 								"""
 								set -e
-								source \$CONDA_BASE/etc/profile.d/conda.sh
-								conda activate \$CONDA_ENV
+								source ${env.CONDA_BASE}/etc/profile.d/conda.sh
+								conda activate ${env.CONDA_ENV}
 								echo 'Installing packages...'
 								pip install --upgrade pip
-								pip install --upgrade -r \$WORKSPACE/requirements_linux.txt
+								pip install --upgrade -r ${env.WORKSPACE}/requirements_linux.txt
 								"""
 							 	, shell: "/bin/bash")
 								// only 'bash' supports 'source'. Force bash mode ! 
@@ -305,7 +305,7 @@ pipeline {
                     def error_flag = 0
 					
                     if (isUnix()) {
-						echo "Activating Conda environment: \$CONDA_ENV"
+						echo "Activating Conda environment: ${env.CONDA_ENV}"
 						error_flag = sh(
 							script: '''
 								set -e
@@ -345,7 +345,7 @@ pipeline {
                     def error_flag = 0
 					
                     if (isUnix()) {
-						echo "Activating Conda environment: \$CONDA_ENV"
+						echo "Activating Conda environment: ${env.CONDA_ENV}"
 						error_flag = sh(
 							script: '''
 								set -e
@@ -383,7 +383,7 @@ pipeline {
 					def error_flag_aweighted = 0
 					
 					if (isUnix()) {
-						echo "Activating Conda environment: \$CONDA_ENV"
+						echo "Activating Conda environment: ${env.CONDA_ENV}"
 						error_flag_lowpass = sh(
 							script: '''
 								set -e
@@ -429,7 +429,7 @@ pipeline {
 					def error_flag = 0
 					
 					if (isUnix()) {
-						echo "Activating Conda environment: \$CONDA_ENV"
+						echo "Activating Conda environment: ${env.CONDA_ENV}"
 						error_flag = sh(
 							script: '''
 								set -e
