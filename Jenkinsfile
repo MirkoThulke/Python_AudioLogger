@@ -255,6 +255,7 @@ pipeline {
 								conda activate \$CONDA_ENV
 								pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
 								''',
+								shell: '/bin/bash',
 								returnStatus: true
 						)
                     } else {
@@ -297,6 +298,7 @@ pipeline {
 								echo "Running pytest integration tests..."
 								pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
 								''',
+								shell: '/bin/bash',
 								returnStatus: true
 						)
                     } else {
@@ -334,6 +336,7 @@ pipeline {
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py
 									''',
+									shell: '/bin/bash',
 									returnStatus: true
 							)
 							error_flag_aweighted = sh(
@@ -343,6 +346,7 @@ pipeline {
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
 									''',
+									shell: '/bin/bash',
 									returnStatus: true
 							)
 							
@@ -377,6 +381,7 @@ pipeline {
 							conda activate $CONDA_ENV
 							pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
 							''',
+							shell: '/bin/bash',
 							returnStatus: true 
 						)
 
