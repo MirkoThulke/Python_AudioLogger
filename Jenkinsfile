@@ -274,9 +274,11 @@ pipeline {
 										set -e
 										source ${env.CONDA_BASE}/etc/profile.d/conda.sh
 										conda activate ${env.CONDA_ENV}
-										echo \\'Installing packages...\\'
 										pip install --upgrade pip
 										pip install --upgrade -r ${env.WORKSPACE}/requirements_linux.txt
+										which python
+										which pip
+										python --version
 									'
 								"""
 							)
