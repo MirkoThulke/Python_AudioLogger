@@ -270,6 +270,7 @@ pipeline {
 							echo "Activating Conda environment: ${env.CONDA_ENV}"
 							sh(script: 
 								"""
+								#!/bin/bash
 								set -e
 								source ${env.CONDA_BASE}/etc/profile.d/conda.sh
 								conda activate ${env.CONDA_ENV}
