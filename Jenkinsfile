@@ -264,33 +264,41 @@ pipeline {
 			steps {
 					echo "Checking if python packages must be updated ..."
 					script {
-                        
+						def error_flag = 0
 
 						if (isUnix()) {
 							echo "Activating Conda environment: ${env.CONDA_ENV}"
-							sh(script: 
+							error_flag = sh(script: 
 								"""
 									bash -c '
-										set -e
-										set -ex
-										source ${env.CONDA_BASE}/etc/profile.d/conda.sh
-										conda activate ${env.CONDA_ENV}
-										pip install --upgrade pip
-										pip install --upgrade --requirement <(grep -v wxpython ${env.WORKSPACE}/requirements_linux.txt)
-										conda install -y -c conda-forge wxpython==4.2.1
-										python -c "import wx; print(wx.VERSION)"
-										which python
-										which pip
-										python --version
+									source ${env.CONDA_BASE}/etc/profile.d/conda.sh
+									conda activate ${env.CONDA_ENV}
+
+									# Upgrade pip
+									pip install --upgrade pip
+
+									# Install all packages EXCEPT wxpython using a temp file
+									grep -v wxpython ${env.WORKSPACE}/requirements_linux.txt > /tmp/reqs.txt
+									pip install --upgrade -r /tmp/reqs.txt
+
+									# Install wxpython via conda (much faster and safer)
+									conda install -y -c conda-forge wxpython==4.2.1
+
+									# Confirm environment
+									python -c "import wx; print(wx.VERSION)"
+									which python
+									which pip
+									python --version
 									'
-								"""
+								""",
+								returnStatus: true
+							)
 							/* exclude wxpython from ip update. It can only be installed manaully, 
 							 * because no pre-build wheel exists for Python 3.12
 							 * set -e : stops at error
 							 * set -x : logs output into jenkins console output
 							 */
-							)
-								// only 'bash' supports 'source'. Force bash mode ! 
+							// only 'bash' supports 'source'. Force bash mode ! 
 						} else {
 							bat '''
 								REM remove of old cache files first
