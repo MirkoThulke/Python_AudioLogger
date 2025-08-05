@@ -248,14 +248,14 @@ pipeline {
                     if (isUnix()) {
 						error_flag = sh(
 							script: '''
-								#!/bin/bash
+								bash -c "
 								set -e
 								echo "Activating Conda environment: \$CONDA_ENV"
 								source \$CONDA_BASE/etc/profile.d/conda.sh
 								conda activate \$CONDA_ENV
 								pytest --junitxml=report_integration_test_config.xml --capture=tee-sys tests/integration_tests/test_pythonConfig.py
+								"
 								''',
-								shell: '/bin/bash',
 								returnStatus: true
 						)
                     } else {
@@ -290,15 +290,15 @@ pipeline {
                     if (isUnix()) {
 						error_flag = sh(
 							script: '''
-								#!/bin/bash
+								bash -c "
 								echo "Activating Conda environment: \$CONDA_ENV"
 								source \$CONDA_BASE/etc/profile.d/conda.sh
 								conda activate \$CONDA_ENV
 
 								echo "Running pytest integration tests..."
 								pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
+								"
 								''',
-								shell: '/bin/bash',
 								returnStatus: true
 						)
                     } else {
@@ -331,22 +331,22 @@ pipeline {
 						
 							error_flag_lowpass = sh(
 								script: '''
-									#!/bin/bash
+									bash -c "
 									source $CONDA_BASE/etc/profile.d/conda.sh
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_lowpass.xml --capture=tee-sys tests/unit_tests/test_unit_lowpass.py
+									"
 									''',
-									shell: '/bin/bash',
 									returnStatus: true
 							)
 							error_flag_aweighted = sh(
 								script: '''
-									#!/bin/bash
+									bash -c "
 									source $CONDA_BASE/etc/profile.d/conda.sh
 									conda activate $CONDA_ENV
 									pytest --junitxml=report_aweighted.xml --capture=tee-sys tests/unit_tests/test_unit_aweighted.py
+									"
 									''',
-									shell: '/bin/bash',
 									returnStatus: true
 							)
 							
@@ -376,12 +376,12 @@ pipeline {
 					if (isUnix()) {
 						error_flag = sh(
 							script: '''
-							#!/bin/bash
+							bash -c "
 							source $CONDA_BASE/etc/profile.d/conda.sh
 							conda activate $CONDA_ENV
 							pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
+							"
 							''',
-							shell: '/bin/bash',
 							returnStatus: true 
 						)
 
