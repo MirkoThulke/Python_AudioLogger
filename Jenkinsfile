@@ -429,9 +429,10 @@ pipeline {
 					def error_flag = 0
 					
 					if (isUnix()) {
+						echo "Activating Conda environment: \$CONDA_ENV"
 						error_flag = sh(
-							echo "Activating Conda environment: \$CONDA_ENV"
 							script: '''
+								set -e
 								source $CONDA_BASE/etc/profile.d/conda.sh
 								conda activate $CONDA_ENV
 								pytest --junitxml=report_smoke_test.xml --capture=tee-sys tests/smoke_tests/test_smoke_audioInput.py
