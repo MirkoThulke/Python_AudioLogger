@@ -318,7 +318,7 @@ pipeline {
 					
                     if (isUnix()) {
 						echo "Activating Conda environment: ${env.CONDA_ENV}"
-						error_flag = sh(
+						error_flag = sh(script: 
 								"""
 									bash -c '
 										set -e
@@ -360,7 +360,7 @@ pipeline {
 					
                     if (isUnix()) {
 						echo "Activating Conda environment: ${env.CONDA_ENV}"
-						error_flag = sh(
+						error_flag = sh(script:
 								"""
 									bash -c '
 										set -e
@@ -400,7 +400,7 @@ pipeline {
 					
 					if (isUnix()) {
 						echo "Activating Conda environment: ${env.CONDA_ENV}"
-						error_flag_lowpass = sh(
+						error_flag_lowpass = sh(script:
 								"""
 									bash -c '
 										set -e
@@ -412,7 +412,7 @@ pipeline {
 								""",
 								returnStatus: true
 						)
-						error_flag_aweighted = sh(
+						error_flag_aweighted = sh(script:
 								"""
 									bash -c '
 										set -e
@@ -450,6 +450,7 @@ pipeline {
 					
 					if (isUnix()) {
 						echo "Activating Conda environment: ${env.CONDA_ENV}"
+						sh(script:	
 								"""
 									bash -c '
 										set -e
