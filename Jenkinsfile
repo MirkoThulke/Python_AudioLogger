@@ -289,17 +289,15 @@ pipeline {
 					
                     if (isUnix()) {
 						error_flag = sh(
-							script: '''
-								bash -c "
-								echo "Activating Conda environment: \$CONDA_ENV"
-								source \$CONDA_BASE/etc/profile.d/conda.sh
-								conda activate \$CONDA_ENV
-
-								echo "Running pytest integration tests..."
-								pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
-								"
-								''',
-								returnStatus: true
+						    script: """
+						        bash <<'EOF'
+						        source \$CONDA_BASE/etc/profile.d/conda.sh
+						        conda activate \$CONDA_ENV
+						        echo "Running integration tests..."
+						        pytest --junitxml=report_integration_test_functional.xml --capture=tee-sys tests/integration_tests/test_integration_audioProcessing.py
+						        EOF
+						    """,
+						    returnStatus: true
 						)
                     } else {
                         error_flag = bat(
