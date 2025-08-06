@@ -8,4 +8,4 @@ pytest==8.4.1
 scipy==1.16.1
 sympy==1.14.0
 viztracer==1.0.4
-wxPython==4.2.3
+wxpython==4.2.3
