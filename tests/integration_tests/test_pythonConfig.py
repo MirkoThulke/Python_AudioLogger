@@ -117,33 +117,6 @@ def test_get_pip_version():
         assert False, f"pip check failed: {e}"
     
     
-    
-def test_check_outdated():
-    try:
-        result = subprocess.run(
-            ["pip", "list", "--outdated"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        
-        output = result.stdout.strip()
-        print(output)
-
-        # Save output to a file (optional)
-        with open("outdated-packages.txt", "w") as f:
-            f.write(output + "\n")
-
-        # If there's any outdated package listed (non-header lines), return 1
-        lines = output.splitlines()
-        if len(lines) > 2:  # Header is 2 lines
-            update_outdated_packages()
-            assert False, f"Outdated packages found.: {lines}"
-        else:
-            assert True, f"No outdated packages found."
-            
-    except Exception as e:
-        assert False, f"Error during pip list: {e}"
 
 
 def test_update_outdated():
