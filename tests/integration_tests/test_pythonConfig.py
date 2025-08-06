@@ -146,6 +146,51 @@ def test_check_outdated():
         assert False, f"Error during pip list: {e}"
 
 
+def test_update_outdated():
+    try:
+        # Step 1: Load packages from requirements file
+        with open(file1, "r") as req_file:
+            required_packages = {
+                line.split("==")[0].strip()
+                for line in req_file
+                if line.strip() and not line.startswith("#")
+            }
+
+        # Step 2: Run pip list --outdated
+        result = subprocess.run(
+            ["pip", "list", "--outdated", "--format=freeze"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        output = result.stdout.strip()
+        print(output)
+
+        # Save to file (optional)
+        with open("outdated-packages.txt", "w") as f:
+            f.write(output + "\n")
+
+        # Step 3: Filter outdated packages that are in requirements
+        outdated_lines = output.splitlines()
+        outdated_required = [
+            line for line in outdated_lines
+            if line.split("==")[0] in required_packages
+        ]
+
+        # Step 4: Update if any
+        if outdated_required:
+            for line in outdated_required:
+                package = line.split("==")[0]
+                subprocess.run(["pip", "install", "--upgrade", package], check=True)
+            assert False, f"Outdated packages found and updated: {outdated_required}"
+        else:
+            assert True, "No outdated packages found from requirements."
+
+    except Exception as e:
+        assert False, f"Error during pip list or upgrade: {e}"
+
+
 # Export only those packages that are relevant for this application
 def test_export_installed_packages():
     try:
@@ -228,7 +273,7 @@ if __name__ == "__main__":
     test_pip_installed()
     test_pip_check()
     test_get_pip_version()
-    test_check_outdated()
+    test_check_required_packages()
+    test_update_outdated()
     test_export_installed_packages()
     test_compare_requirementsFiles(file1,file2)
-    test_check_required_packages()
