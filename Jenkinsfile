@@ -288,7 +288,7 @@ pipeline {
 									pip install --upgrade -r /tmp/reqs.txt
 
 									# Install wxpython via conda (much faster and safer)
-									conda install -y -c conda-forge wxpython==4.2.1
+									conda install -y -c conda-forge wxPython==4.2.1
 
 									# Confirm environment
 									python -c "import wx; print(wx.VERSION)"
