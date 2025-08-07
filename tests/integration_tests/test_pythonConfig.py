@@ -226,8 +226,9 @@ def test_check_conda_wxpython_update():
 # Export only those packages that are relevant for this application
 def test_export_installed_packages():
     try:
+        # Step 1: Run pipreqs to generate the requirements file
         result = subprocess.run(
-            ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8'],
+            ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8', '--use-local'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -240,8 +241,27 @@ def test_export_installed_packages():
 
         assert os.path.exists(file2), f"Requirements file not created: {file2}"
 
+        # Hardcode wxpython for Unix / linux only 
+        if is_unix:
+            # Step 2: Post-process the requirements file
+            with open(file2, 'r') as f:
+                lines = f.readlines()
+                
+            # Step 3: Filter out wxPython from pipreqs-generated lines
+            filtered_lines = [line for line in lines if not line.lower().startswith('wxpython')]
+
+            # Step 4: Append wxPython==4.2.1 only on Unix
+            filtered_lines.append("wxPython==4.2.1\n")
+
+            # Step 5: Write final requirements file
+            with open(file2, 'w') as f:
+                f.writelines(filtered_lines)
+
+
+        print("Modified requirements written to:", file2)
+
     except Exception as e:
-        assert False, f"Error during pipreqs: {e}"
+        assert False, f"Error during pipreqs or post-processing: {e}"
 
 
 def load_requirementsFiles(file_path):
