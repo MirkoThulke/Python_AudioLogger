@@ -85,9 +85,13 @@ def test_update_outdated():
                 if line.strip() and not line.startswith("#")
             }
 
-        # Exclude packages managed by conda
-        excluded_packages = {"wxPython"}
-
+        if is_unix : 
+            # Exclude packages managed by conda
+            excluded_packages = {"wxPython"}
+        else :
+            # For windows , install wxPython via pips
+            excluded_packages = {}
+            
         # Step 2: Run pip list --outdated
         result = subprocess.run(
             ["pip", "list", "--outdated", "--format=freeze"],
@@ -124,55 +128,59 @@ def test_update_outdated():
 
 
 def test_check_conda_wxpython_update():
-    try:
-        # Get currently installed version
-        installed = subprocess.run(
-            ["conda", "list", "wxpython"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        lines = installed.stdout.splitlines()
-        installed_version = None
-        for line in lines:
-            if line.lower().startswith("wxpython"):
-                parts = line.split()
-                if len(parts) >= 2:
-                    installed_version = parts[1]
-                    break
+    if is_unix : 
 
-        if not installed_version:
-            raise Exception("wxPython not found in conda list.")
-
-        # Search available versions on conda-forge
-        search = subprocess.run(
-            ["conda", "search", "-c", "conda-forge", "wxpython"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-
-        available_versions = {
-            line.split()[1]
-            for line in search.stdout.splitlines()
-            if line and not line.startswith("#") and "wxpython" in line
-        }
-
-        if not available_versions:
-            raise Exception("Could not find wxPython versions from conda-forge.")
-
-        latest_version = sorted(available_versions, key=lambda v: list(map(int, v.split("."))))[-1]
-
-        if installed_version != latest_version:
-            print(f"wxPython is outdated: installed={installed_version}, latest={latest_version}")
-            assert False, f"Newer wxPython version available on conda-forge: {latest_version}"
-        else:
-            assert True, f"wxPython is up to date ({installed_version})"
-
-    except Exception as e:
-        assert False, f"Error checking wxPython conda version: {e}"
-
-
+        try:
+            # Get currently installed version
+            installed = subprocess.run(
+                ["conda", "list", "wxpython"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            lines = installed.stdout.splitlines()
+            installed_version = None
+            for line in lines:
+                if line.lower().startswith("wxpython"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        installed_version = parts[1]
+                        break
+    
+            if not installed_version:
+                raise Exception("wxPython not found in conda list.")
+    
+            # Search available versions on conda-forge
+            search = subprocess.run(
+                ["conda", "search", "-c", "conda-forge", "wxpython"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+    
+            available_versions = {
+                line.split()[1]
+                for line in search.stdout.splitlines()
+                if line and not line.startswith("#") and "wxpython" in line
+            }
+    
+            if not available_versions:
+                raise Exception("Could not find wxPython versions from conda-forge.")
+    
+            latest_version = sorted(available_versions, key=lambda v: list(map(int, v.split("."))))[-1]
+    
+            if installed_version != latest_version:
+                print(f"wxPython is outdated: installed={installed_version}, latest={latest_version}")
+                assert False, f"Newer wxPython version available on conda-forge: {latest_version}"
+            else:
+                assert True, f"wxPython is up to date ({installed_version})"
+    
+        except Exception as e:
+            assert False, f"Error checking wxPython conda version: {e}"
+    else : 
+        # On windows; do nothing
+        assert True
+    
 
 # Export only those packages that are relevant for this application
 def test_export_installed_packages():
