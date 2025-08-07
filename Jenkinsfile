@@ -122,6 +122,12 @@ pipeline {
 	}
 
 	
+	// Trigger jenkins job upon GitHub action
+	triggers {
+		githubPush()
+	}
+	
+	  
     stages {
         // put individual stages here ....
         // each stage represents a jenkins pipeline stage
