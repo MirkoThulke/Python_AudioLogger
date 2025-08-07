@@ -99,6 +99,10 @@ pipeline {
         label 'Jenkins_Node_Python_AudioLogger'
     }
     
+	// Trigger jenkins job upon GitHub action
+	triggers {
+		githubPush()
+	}
     
     environment {
         
@@ -121,11 +125,7 @@ pipeline {
 		buildDiscarder(logRotator(numToKeepStr: '5', daysToKeepStr: '7'))
 	}
 
-	
-	// Trigger jenkins job upon GitHub action
-	triggers {
-		githubPush()
-	}
+
 	
 	  
     stages {
