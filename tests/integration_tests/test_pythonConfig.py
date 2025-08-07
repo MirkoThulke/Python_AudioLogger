@@ -26,49 +26,6 @@ else :
 # https://youtu.be/6tNS--WetLI?feature=shared
 
 
-def update_package(package):
-    try:
-        # Your existing update logic here, e.g.
-        subprocess.run(['pip', 'install', '--upgrade', package], check=True)
-
-    except Exception as e:
-        assert False, f"Error during package update: {package}    {e}"
-
-def update_outdated_packages():
-    try:
-        # Get list of outdated packages
-        result = subprocess.run(
-            ['pip', 'list', '--outdated'],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-
-        lines = result.stdout.splitlines()
-        # Skip header (usually first 2 lines)
-        # Example output:
-        # Package    Version Latest Type
-        # ---------- ------- ------ -----
-        # certifi    2025.1.31 2025.6.15 wheel
-
-        if len(lines) < 3:
-            print("No outdated packages found.")
-            return
-
-        packages = []
-        for line in lines[2:]:  # skip headers
-            parts = line.split()
-            if parts:
-                packages.append(parts[0])
-
-        for package in packages:
-            print(f"Updating {package} ...")
-            update_package(package)
-
-    except Exception as e:
-        assert False, f"Error during package update test: {e}"
-    
-    
     
 def test_python_version():
     """Ensure Python version is at least 3.8"""
@@ -115,10 +72,9 @@ def test_get_pip_version():
         print("Failed to get pip version.")
         print(e.stderr)
         assert False, f"pip check failed: {e}"
-    
-    
 
-
+ 
+# update relevant packages but exlude wxPython, because no pre-build wheel available for Python 2.12
 def test_update_outdated():
     try:
         # Step 1: Load packages from requirements file
@@ -128,6 +84,9 @@ def test_update_outdated():
                 for line in req_file
                 if line.strip() and not line.startswith("#")
             }
+
+        # Exclude packages managed by conda
+        excluded_packages = {"wxPython"}
 
         # Step 2: Run pip list --outdated
         result = subprocess.run(
@@ -144,11 +103,11 @@ def test_update_outdated():
         with open("outdated-packages.txt", "w") as f:
             f.write(output + "\n")
 
-        # Step 3: Filter outdated packages that are in requirements
+        # Step 3: Filter outdated packages that are in requirements and not excluded
         outdated_lines = output.splitlines()
         outdated_required = [
             line for line in outdated_lines
-            if line.split("==")[0] in required_packages
+            if line.split("==")[0] in required_packages and line.split("==")[0] not in excluded_packages
         ]
 
         # Step 4: Update if any
@@ -162,6 +121,57 @@ def test_update_outdated():
 
     except Exception as e:
         assert False, f"Error during pip list or upgrade: {e}"
+
+
+def test_check_conda_wxpython_update():
+    try:
+        # Get currently installed version
+        installed = subprocess.run(
+            ["conda", "list", "wxpython"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        lines = installed.stdout.splitlines()
+        installed_version = None
+        for line in lines:
+            if line.lower().startswith("wxpython"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    installed_version = parts[1]
+                    break
+
+        if not installed_version:
+            raise Exception("wxPython not found in conda list.")
+
+        # Search available versions on conda-forge
+        search = subprocess.run(
+            ["conda", "search", "-c", "conda-forge", "wxpython"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+        available_versions = {
+            line.split()[1]
+            for line in search.stdout.splitlines()
+            if line and not line.startswith("#") and "wxpython" in line
+        }
+
+        if not available_versions:
+            raise Exception("Could not find wxPython versions from conda-forge.")
+
+        latest_version = sorted(available_versions, key=lambda v: list(map(int, v.split("."))))[-1]
+
+        if installed_version != latest_version:
+            print(f"wxPython is outdated: installed={installed_version}, latest={latest_version}")
+            assert False, f"Newer wxPython version available on conda-forge: {latest_version}"
+        else:
+            assert True, f"wxPython is up to date ({installed_version})"
+
+    except Exception as e:
+        assert False, f"Error checking wxPython conda version: {e}"
+
 
 
 # Export only those packages that are relevant for this application
@@ -246,7 +256,8 @@ if __name__ == "__main__":
     test_pip_installed()
     test_pip_check()
     test_get_pip_version()
-    test_check_required_packages()
     test_update_outdated()
+    test_check_conda_wxpython_update()
     test_export_installed_packages()
     test_compare_requirementsFiles(file1,file2)
+    test_check_required_packages()
