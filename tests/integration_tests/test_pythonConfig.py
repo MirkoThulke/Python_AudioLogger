@@ -10,6 +10,7 @@ is_unix = os.getenv('IS_UNIX') == 'true'
 PASSED      = True
 FAILED      = False
 
+
 # For requirement.txt file check
 if is_unix :
     file1 = "requirements_linux.txt"
@@ -17,7 +18,9 @@ if is_unix :
 else :
     file1 = "requirements_windows.txt"
     file2 = "requirements_windows_new.txt"
-    
+
+required_wxpython_version="4.2.1"
+
 #########################
 # Pytest calls all functions starting with "test_" automatically
 # hence, functions to be called by pytest MUST start with "test_"
@@ -148,7 +151,7 @@ def test_check_conda_wxpython_update():
             print(f"Installed wxPython version: {installed_version}")
 
             # Step 2: Conditionally install if version is missing or incorrect
-            required_version = "4.2.1"
+            required_version = required_wxpython_version
             if installed_version != required_version:
                 print(f"Installing wxPython {required_version} via conda...")
                 subprocess.run(
@@ -228,7 +231,7 @@ def test_export_installed_packages():
     try:
         # Step 1: Run pipreqs to generate the requirements file
         result = subprocess.run(
-            ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8', '--use-local'],
+            ['pipreqs', '--force', '--savepath', file2, '--encoding', 'utf-8'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -251,7 +254,7 @@ def test_export_installed_packages():
             filtered_lines = [line for line in lines if not line.lower().startswith('wxpython')]
 
             # Step 4: Append wxPython==4.2.1 only on Unix
-            filtered_lines.append("wxPython==4.2.1\n")
+            filtered_lines.append(f"wxPython=={required_wxpython_version}\n")
 
             # Step 5: Write final requirements file
             with open(file2, 'w') as f:

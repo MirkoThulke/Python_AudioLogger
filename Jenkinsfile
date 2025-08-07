@@ -279,7 +279,10 @@ pipeline {
 									bash -c '
 									source ${env.CONDA_BASE}/etc/profile.d/conda.sh
 									conda activate ${env.CONDA_ENV}
-
+									
+									# remove cached files
+									pip cache purge
+									
 									# Upgrade pip
 									pip install --upgrade pip
 
@@ -295,6 +298,9 @@ pipeline {
 									which python
 									which pip
 									python --version
+								
+									# remove cached files
+									pip cache purge
 									'
 								""",
 								returnStatus: true
