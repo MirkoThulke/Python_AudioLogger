@@ -128,8 +128,49 @@ def test_update_outdated():
 
 
 def test_check_conda_wxpython_update():
-    if is_unix : 
+    if is_unix:
+        try:
+            # Step 1: Check installed version
+            result = subprocess.run(
+                ["conda", "list", "wxpython"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            installed_version = None
+            for line in result.stdout.splitlines():
+                if line.lower().startswith("wxpython"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        installed_version = parts[1]
+                        break
 
+            print(f"Installed wxPython version: {installed_version}")
+
+            # Step 2: Conditionally install if version is missing or incorrect
+            required_version = "4.2.1"
+            if installed_version != required_version:
+                print(f"Installing wxPython {required_version} via conda...")
+                subprocess.run(
+                    ["conda", "install", "-y", "-c", "conda-forge", f"wxPython=={required_version}"],
+                    check=True,
+                    capture_output=True,
+                    text=True
+                )
+                assert True
+            else:
+                print(f"wxPython is already at required version {required_version}")
+                assert True
+
+        except subprocess.CalledProcessError as e:
+            print("Conda error output:\n", e.stderr)
+            assert False, f"Error checking or installing wxPython via conda: {e}"
+
+    else:
+        # On Windows or other non-Unix systems; do nothing
+        assert True
+        
+"""
         try:
             # Get currently installed version
             installed = subprocess.run(
@@ -180,7 +221,7 @@ def test_check_conda_wxpython_update():
     else : 
         # On windows; do nothing
         assert True
-    
+ """   
 
 # Export only those packages that are relevant for this application
 def test_export_installed_packages():
