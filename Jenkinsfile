@@ -100,6 +100,7 @@ pipeline {
     }
     
 	// Trigger jenkins job upon GitHub action
+	// review required from GitHub perspective
 	triggers {
 		githubPush()
 	}
